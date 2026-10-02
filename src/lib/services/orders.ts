@@ -1,0 +1,312 @@
+import { store } from "@/lib/store";
+import type { Order, OrderStatus } from "@/lib/types";
+import type { Actor } from "./audit";
+import { reserveForOrder, finalizeForOrder, restoreForOrder, releaseForOrder } from "./inventory";
+import { processCommissionForStatus } from "./commission";
+import { notifyAdmins, notifyWorker } from "./notifications";
+import { logAudit } from "./audit";
+import { isValidPhone } from "@/lib/utils";
+
+export class OrderError extends Error {}
+
+/** Allowed status transitions (pragmatic courier workflow). */
+const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  CREATED: ["PENDING", "ASSIGNED", "CANCELLED"],
+  PENDING: ["ASSIGNED", "BOOKED", "CANCELLED"],
+  ASSIGNED: ["PENDING", "BOOKED", "CANCELLED"],
+  BOOKED: ["IN_TRANSIT", "RETURNED", "CANCELLED"],
+  IN_TRANSIT: ["DELIVERED", "RETURNED"],
+  DELIVERED: ["RETURNED"],
+  RETURNED: [],
+  CANCELLED: [],
+};
+
+export async function generateOrderNumber(): Promise<string> {
+  const now = new Date();
+  const dayKey = now.toISOString().slice(0, 10);
+  const { total } = await store.list("orders", {
+    dateRange: { field: "created_at", from: dayKey, to: dayKey },
+  });
+  const seq = String(total + 1).padStart(3, "0");
+  const yy = dayKey.slice(2, 4), mm = dayKey.slice(5, 7), dd = dayKey.slice(8, 10);
+  return `ORD-${yy}${mm}${dd}-${seq}`;
+}
+
+export interface CreateOrderInput {
+  customer: { id?: string; name?: string; phone?: string; email?: string; address?: string; city?: string };
+  items: { product_id: string; quantity: number; unit_price: number }[];
+  discount: number;
+  cod_amount?: number;
+  delivery_address: string;
+  city: string;
+  notes?: string | null;
+  worker_id?: string | null;
+}
+
+export async function createOrder(session: Actor, input: CreateOrderInput): Promise<Order> {
+  // ---- validation (server-side; never trust client) ----
+  if (!input.items?.length) throw new OrderError("At least one order item is required.");
+  if (!input.delivery_address?.trim()) throw new OrderError("Delivery address is required.");
+  if (!input.city?.trim()) throw new OrderError("Delivery city is required.");
+  if (input.discount < 0) throw new OrderError("Discount cannot be negative.");
+
+  const productIds = input.items.map((i) => i.product_id);
+  let subtotal = 0;
+  const itemRows: { product_id: string; product_name: string; sku: string; quantity: number; unit_price: number; line_total: number }[] = [];
+  for (const item of input.items) {
+    const product = await store.get<{ id: string; name: string; sku: string; selling_price: number; status: string }>(
+      "products",
+      item.product_id
+    );
+    if (!product) throw new OrderError("One of the selected products was not found.");
+    if (product.status !== "active") throw new OrderError(`Product "${product.name}" is inactive.`);
+    const qty = Math.floor(Number(item.quantity));
+    if (!qty || qty <= 0) throw new OrderError("Item quantities must be positive numbers.");
+    const unit = Number(item.unit_price ?? product.selling_price);
+    if (unit < 0) throw new OrderError("Unit price cannot be negative.");
+    subtotal += unit * qty;
+    itemRows.push({
+      product_id: product.id,
+      product_name: product.name,
+      sku: product.sku,
+      quantity: qty,
+      unit_price: unit,
+      line_total: unit * qty,
+    });
+  }
+  const total = subtotal - input.discount;
+  if (total < 0) throw new OrderError("Discount cannot exceed the order total.");
+
+  // ---- customer: link existing or create/find by phone ----
+  let customerId = input.customer.id;
+  if (!customerId) {
+    const phone = (input.customer.phone ?? "").trim();
+    if (!input.customer.name?.trim()) throw new OrderError("Customer name is required.");
+    if (!isValidPhone(phone)) throw new OrderError("A valid customer phone number is required.");
+    const existing = await store.first("customers", { phone });
+    if (existing) {
+      customerId = existing.id;
+    } else {
+      const created = await store.insert("customers", {
+        name: input.customer.name.trim(),
+        phone,
+        email: input.customer.email || null,
+        address: input.customer.address || input.delivery_address,
+        city: input.customer.city || input.city,
+        status: "active",
+      });
+      customerId = created.id;
+    }
+  }
+
+  // ---- worker + commission rate snapshot ----
+  let workerId = input.worker_id || null;
+  let commissionRate: number | null = null;
+  if (workerId) {
+    const worker = await store.get<{ id: string; role: string; status: string; commission_rate: number; name: string }>(
+      "profiles",
+      workerId
+    );
+    if (!worker || worker.role !== "worker" || worker.status !== "active") {
+      throw new OrderError("Selected worker is not an active worker.");
+    }
+    commissionRate = worker.commission_rate;
+  }
+
+  // ---- create order ----
+  const orderNumber = await generateOrderNumber();
+  const order = await store.insert<Order>("orders", {
+    order_number: orderNumber,
+    customer_id: customerId,
+    worker_id: workerId,
+    status: workerId ? "ASSIGNED" : "PENDING",
+    subtotal,
+    discount: input.discount,
+    total,
+    cod_amount: input.cod_amount ?? total,
+    delivery_address: input.delivery_address.trim(),
+    city: input.city.trim(),
+    notes: input.notes || null,
+    commission_rate: commissionRate,
+    commission_rate_locked_at: workerId ? new Date().toISOString() : null,
+    booking_status: "not_booked",
+    created_by: session.userId,
+  });
+
+  for (const row of itemRows) {
+    await store.insert("order_items", { order_id: order.id, ...row });
+  }
+
+  await store.insert("order_status_history", {
+    order_id: order.id,
+    status: "CREATED",
+    note: "Order created",
+    created_by: session.userId,
+  });
+  if (workerId) {
+    await store.insert("order_status_history", {
+      order_id: order.id,
+      status: "ASSIGNED",
+      note: "Worker assigned at creation",
+      created_by: session.userId,
+    });
+  }
+
+  // ---- reserve inventory (never permanently deduct at creation) ----
+  await reserveForOrder(itemRows, order.id, orderNumber, session.userId);
+
+  // ---- side effects ----
+  if (workerId) {
+    await notifyWorker(workerId, {
+      title: "New order assigned",
+      message: `Order ${orderNumber} has been assigned to you.`,
+      type: "info",
+      link: `/worker/orders/${order.id}`,
+    });
+  }
+  await notifyAdmins({
+    title: "New order created",
+    message: `Order ${orderNumber} (Rs ${total.toLocaleString()}) was created.`,
+    type: "info",
+    link: `/admin/orders/${order.id}`,
+  });
+  await logAudit({
+    session,
+    action: "order.created",
+    entity: "orders",
+    entityId: order.id,
+    newData: { order_number: orderNumber, total, worker_id: workerId },
+  });
+
+  return order;
+}
+
+export async function assignWorker(session: Actor, orderId: string, workerId: string): Promise<void> {
+  const order = await store.get<Order>("orders", orderId);
+  if (!order) throw new OrderError("Order not found.");
+  if (["DELIVERED", "RETURNED", "CANCELLED"].includes(order.status)) {
+    throw new OrderError("Cannot assign a worker to a closed order.");
+  }
+  const worker = await store.get<{ id: string; role: string; status: string; commission_rate: number; name: string }>(
+    "profiles",
+    workerId
+  );
+  if (!worker || worker.role !== "worker") throw new OrderError("Selected user is not a worker.");
+  if (worker.status !== "active") throw new OrderError("This worker is currently disabled.");
+
+  await store.update("orders", orderId, {
+    worker_id: workerId,
+    commission_rate: worker.commission_rate,
+    commission_rate_locked_at: new Date().toISOString(),
+    status: order.status === "CREATED" || order.status === "PENDING" ? "ASSIGNED" : order.status,
+  });
+  await store.insert("order_status_history", {
+    order_id: orderId,
+    status: "ASSIGNED",
+    note: `Assigned to ${worker.name}`,
+    created_by: session.userId,
+  });
+  await notifyWorker(workerId, {
+    title: "New order assigned",
+    message: `Order ${order.order_number} has been assigned to you.`,
+    type: "info",
+    link: `/worker/orders/${orderId}`,
+  });
+  await logAudit({ session, action: "order.assigned", entity: "orders", entityId: orderId, newData: { worker_id: workerId, worker_name: worker.name } });
+}
+
+export async function changeOrderStatus(
+  session: Actor,
+  orderId: string,
+  newStatus: OrderStatus,
+  note?: string | null
+): Promise<Order> {
+  const order = await store.get<Order>("orders", orderId);
+  if (!order) throw new OrderError("Order not found.");
+
+  const allowed = TRANSITIONS[order.status] ?? [];
+  if (!allowed.includes(newStatus)) {
+    throw new OrderError(`Cannot change status from ${order.status} to ${newStatus}.`);
+  }
+
+  const previouslyDelivered = order.status === "DELIVERED" || (await store.first("order_status_history", { order_id: orderId, status: "DELIVERED" }) !== null);
+
+  // ---- side effects BEFORE persisting status ----
+  if (newStatus === "DELIVERED") {
+    await finalizeForOrder(orderId, order.order_number, session.userId);
+  }
+  if (newStatus === "RETURNED") {
+    if (previouslyDelivered) {
+      // physical product received back into available stock
+      await restoreForOrder(orderId, order.order_number, session.userId);
+    } else {
+      // never deducted from stock — just release the reservation
+      await releaseForOrder(orderId, order.order_number, session.userId);
+    }
+  }
+  if (newStatus === "CANCELLED" && ["CREATED", "PENDING", "ASSIGNED", "BOOKED"].includes(order.status)) {
+    await releaseForOrder(orderId, order.order_number, session.userId);
+  }
+
+  await store.update("orders", orderId, { status: newStatus });
+
+  await store.insert("order_status_history", {
+    order_id: orderId,
+    status: newStatus,
+    note: note ?? null,
+    created_by: session.userId,
+  });
+
+  // commission ledger (idempotent)
+  await processCommissionForStatus(orderId, newStatus);
+
+  if (order.worker_id) {
+    const messages: Partial<Record<OrderStatus, string>> = {
+      DELIVERED: `Order ${order.order_number} was delivered.`,
+      RETURNED: `Order ${order.order_number} was returned.`,
+      CANCELLED: `Order ${order.order_number} was cancelled.`,
+      IN_TRANSIT: `Order ${order.order_number} is now in transit.`,
+    };
+    if (messages[newStatus]) {
+      await notifyWorker(order.worker_id, {
+        title: `Order ${newStatus === "DELIVERED" ? "delivered" : newStatus === "RETURNED" ? "returned" : "update"}`,
+        message: messages[newStatus]!,
+        type: newStatus === "DELIVERED" ? "success" : newStatus === "RETURNED" || newStatus === "CANCELLED" ? "warning" : "info",
+        link: `/worker/orders/${orderId}`,
+      });
+    }
+  }
+  await logAudit({
+    session,
+    action: "order.status_changed",
+    entity: "orders",
+    entityId: orderId,
+    oldData: { status: order.status },
+    newData: { status: newStatus, note: note ?? null },
+  });
+
+  return { ...order, status: newStatus };
+}
+
+/** Worker updates their own order status (restricted transitions). */
+export async function workerUpdateStatus(
+  session: Actor,
+  orderId: string,
+  newStatus: OrderStatus,
+  note?: string | null
+): Promise<void> {
+  const order = await store.get<Order>("orders", orderId);
+  if (!order) throw new OrderError("Order not found.");
+  if (order.worker_id !== session.userId) {
+    throw new OrderError("You can only update orders assigned to you.");
+  }
+  const workerAllowed: Partial<Record<OrderStatus, OrderStatus[]>> = {
+    BOOKED: ["IN_TRANSIT"],
+    IN_TRANSIT: ["DELIVERED", "RETURNED"],
+  };
+  const allowed = workerAllowed[order.status] ?? [];
+  if (!allowed.includes(newStatus)) {
+    throw new OrderError(`As a worker you cannot change status from ${order.status} to ${newStatus}.`);
+  }
+  await changeOrderStatus(session, orderId, newStatus, note ?? "Updated by worker");
+}

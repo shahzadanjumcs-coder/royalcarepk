@@ -3,7 +3,20 @@ import { store } from "@/lib/store";
 import { getFlashipConfig } from "@/lib/flaship/service";
 
 /** One call to populate create-order form dropdowns. */
-export const GET = withAuth(["super_admin", "admin"], async () => {
+export const GET = withAuth(["super_admin", "admin", "worker"], async (session) => {
+  // Workers may only see customers + active products for their order form.
+  // They must NOT see worker lists, Flaship config or courier defaults.
+  if (session.role === "worker") {
+    const [customers, products] = await Promise.all([
+      store.list<{ id: string; name: string; phone: string; city: string | null; address: string | null }>("customers", { filters: { status: "active" }, orderBy: { field: "name", dir: "asc" } }),
+      store.list<{ id: string; name: string; sku: string; selling_price: number; current_stock: number; reserved_stock: number; status: string }>("products", { filters: { status: "active" }, orderBy: { field: "name", dir: "asc" } }),
+    ]);
+    return ok({
+      customers: customers.rows,
+      products: products.rows.map((p) => ({ ...p, available_stock: p.current_stock - p.reserved_stock })),
+    });
+  }
+
   const [customers, products, workers, couriers, cities, pickups, cfg] = await Promise.all([
     store.list<{ id: string; name: string; phone: string; city: string | null; address: string | null }>("customers", { filters: { status: "active" }, orderBy: { field: "name", dir: "asc" } }),
     store.list<{ id: string; name: string; sku: string; selling_price: number; current_stock: number; reserved_stock: number; status: string }>("products", { filters: { status: "active" }, orderBy: { field: "name", dir: "asc" } }),

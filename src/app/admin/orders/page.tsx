@@ -7,7 +7,7 @@ import { useList, buildQuery, useDebounced } from "@/lib/client";
 import { PageHeader } from "@/components/app/states";
 import { SearchInput, RangeFilter } from "@/components/app/filters";
 import { DataTable, type Column } from "@/components/app/data-table";
-import { OrderStatusBadge, BookingStatusBadge } from "@/components/app/badges";
+import { OrderStatusBadge, BookingStatusBadge, ApprovalStatusBadge } from "@/components/app/badges";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
 import type { Order } from "@/lib/types";
@@ -23,10 +23,18 @@ const STATUS_TABS = [
   { key: "CANCELLED", label: "Cancelled" },
 ];
 
+const APPROVAL_TABS = [
+  { key: "ALL", label: "All approvals" },
+  { key: "PENDING", label: "Pending" },
+  { key: "APPROVED", label: "Approved" },
+  { key: "REJECTED", label: "Rejected" },
+];
+
 function OrdersContent() {
   const params = useSearchParams();
   const router = useRouter();
   const status = params.get("status") ?? "ALL";
+  const approval = params.get("approval") ?? "ALL";
   const [search, setSearch] = useState("");
   const debounced = useDebounced(search);
   const [preset, setPreset] = useState("all");
@@ -35,6 +43,7 @@ function OrdersContent() {
 
   const query = buildQuery({
     status,
+    approval: approval !== "ALL" ? approval : undefined,
     search: debounced,
     page,
     perPage: 15,
@@ -42,7 +51,7 @@ function OrdersContent() {
     from: range.preset === "custom" ? range.from : undefined,
     to: range.preset === "custom" ? range.to : undefined,
   });
-  const { data, loading, error, refresh } = useList<Order>(`/api/orders${query}`, [status, debounced, preset, range.from, range.to, page]);
+  const { data, loading, error, refresh } = useList<Order>(`/api/orders${query}`, [status, approval, debounced, preset, range.from, range.to, page]);
 
   const columns: Column<Order>[] = useMemo(
     () => [
@@ -77,6 +86,7 @@ function OrdersContent() {
         header: "COD",
         render: (o) => <span className="font-semibold">{formatCurrency(o.cod_amount)}</span>,
       },
+      { key: "approval_status", header: "Approval", render: (o) => <ApprovalStatusBadge status={o.approval_status} />, hideInCard: true },
       { key: "status", header: "Status", render: (o) => <OrderStatusBadge status={o.status} /> },
       { key: "booking_status", header: "Booking", render: (o) => <BookingStatusBadge status={o.booking_status} />, hideInCard: true },
       {
@@ -116,6 +126,33 @@ function OrdersContent() {
             onClick={() => {
               setPage(1);
               router.replace(t.key === "ALL" ? "/admin/orders" : `/admin/orders?status=${t.key}`);
+            }}
+          >
+            {t.label}
+          </Button>
+        ))}
+      </div>
+
+      {/* Approval workflow tabs */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin no-print" role="tablist" aria-label="Approval filter">
+        {APPROVAL_TABS.map((t) => (
+          <Button
+            key={t.key}
+            role="tab"
+            aria-selected={approval === t.key}
+            size="sm"
+            variant={approval === t.key ? "default" : "outline"}
+            className={cn(
+              "h-8 shrink-0 rounded-full px-3.5 text-xs",
+              approval !== t.key && "bg-card",
+              t.key === "PENDING" && approval !== t.key && "border-amber-200 text-amber-700"
+            )}
+            onClick={() => {
+              setPage(1);
+              const sp = new URLSearchParams(params.toString());
+              if (t.key === "ALL") sp.delete("approval");
+              else sp.set("approval", t.key);
+              router.replace(`/admin/orders${sp.toString() ? `?${sp.toString()}` : ""}`);
             }}
           >
             {t.label}

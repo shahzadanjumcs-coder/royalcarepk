@@ -1,6 +1,6 @@
 import { ok, fail, withAuth, GENERIC_ERROR } from "@/lib/api/helpers";
 import { store, IS_DEMO_MODE } from "@/lib/store";
-import { getWorkerDetail } from "@/lib/services/workers";
+import { getWorkerDetail, deleteWorkerAccount, WorkerDeleteError } from "@/lib/services/workers";
 import { logAudit } from "@/lib/services/audit";
 import { isValidPercent } from "@/lib/utils";
 import type { Session } from "@/lib/types";
@@ -42,6 +42,25 @@ export const PATCH = withAuth(["super_admin", "admin"], async (session: Session,
     return ok({ success: true });
   } catch (e) {
     console.error("[workers.PATCH]", e);
+    return fail(GENERIC_ERROR, 500);
+  }
+});
+
+/**
+ * Permanently delete a worker account (super_admin only).
+ * Historical orders, order items, payments, commissions, shipments and audit
+ * logs are NEVER deleted — worker references are nulled and identity snapshots
+ * preserved (migration 0003). The login account is removed server-side via the
+ * service-role admin API so the worker can no longer sign in.
+ */
+export const DELETE = withAuth(["super_admin"], async (session: Session, _req, ctx) => {
+  try {
+    const { id } = await (ctx as unknown as Ctx).params;
+    const result = await deleteWorkerAccount(session, id);
+    return ok({ success: true, deleted: result });
+  } catch (e) {
+    if (e instanceof WorkerDeleteError) return fail(e.message, 422);
+    console.error("[workers.DELETE]", e);
     return fail(GENERIC_ERROR, 500);
   }
 });

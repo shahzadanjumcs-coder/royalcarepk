@@ -6,21 +6,14 @@ import { useApi } from "@/lib/client";
 import { PageHeader, ErrorState, PageSpinner } from "@/components/app/states";
 import { StatCard } from "@/components/app/stat-card";
 import { RangeFilter } from "@/components/app/filters";
-import { OrderStatusBadge } from "@/components/app/badges";
-import {
-  OrdersAreaChart,
-  DeliveredReturnedChart,
-  SalesBarChart,
-  StatusPieChart,
-  WorkerPerformanceChart,
-  InventoryMovementChart,
-} from "@/components/charts/charts";
-import type { DashboardData } from "@/lib/services/dashboard";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { OrderStatusBadge, ApprovalStatusBadge } from "@/components/app/badges";
+import { ApprovalActions } from "@/components/app/approval-actions";
+import { formatCurrency, formatDateTime, formatNumber } from "@/lib/utils";
 import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
+  ClipboardCheck,
   Clock,
   PackageCheck,
   PercentCircle,
@@ -32,6 +25,98 @@ import {
   CalendarClock,
   Banknote,
 } from "lucide-react";
+import type { Order } from "@/lib/types";
+import type { DashboardData } from "@/lib/services/dashboard";
+import {
+  OrdersAreaChart,
+  DeliveredReturnedChart,
+  SalesBarChart,
+  StatusPieChart,
+  WorkerPerformanceChart,
+  InventoryMovementChart,
+} from "@/components/charts/charts";
+
+/** Pending approval row — items come back summarized (not full OrderItem rows). */
+interface PendingOrder extends Omit<Order, "items"> {
+  customer_name: string;
+  customer_phone: string;
+  worker_name: string | null;
+  items?: { product_name: string; quantity: number; line_total: number }[];
+}
+
+/** Live list of worker orders waiting for approval with inline actions. */
+function PendingApprovalsCard() {
+  const { data, loading, error, refresh } = useApi<{ rows: PendingOrder[]; total: number }>(
+    "/api/orders?approval=PENDING&include_items=1&perPage=5"
+  );
+
+  return (
+    <section className="rounded-xl border border-amber-200 bg-amber-50/40" aria-label="Pending approvals">
+      <div className="flex items-center justify-between border-b border-amber-200 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="h-4 w-4 text-amber-600" />
+          <h3 className="text-sm font-semibold">Pending Approvals</h3>
+          {data && data.total > 0 ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{data.total}</span>
+          ) : null}
+        </div>
+        <Link href="/admin/orders?approval=PENDING" className="text-xs font-medium text-emerald-700 hover:underline">
+          View all
+        </Link>
+      </div>
+      {loading ? (
+        <p className="px-4 py-6 text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <div className="px-4 py-4">
+          <p className="text-sm text-rose-600">{error}</p>
+          <button className="mt-1 text-xs font-medium text-emerald-700 hover:underline" onClick={refresh}>Retry</button>
+        </div>
+      ) : !data || data.rows.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-muted-foreground">No worker orders waiting for approval. 🎉</p>
+      ) : (
+        <div className="divide-y divide-amber-200/70">
+          {data.rows.map((o) => (
+            <div key={o.id} className="px-4 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link href={`/admin/orders/${o.id}`} className="text-sm font-semibold hover:underline">{o.order_number}</Link>
+                    <ApprovalStatusBadge status={o.approval_status} />
+                    <span className="text-xs text-muted-foreground">{formatDateTime(o.created_at)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Worker: <span className="font-medium text-foreground">{o.worker_name ?? "—"}</span>
+                    {" · "}Customer: <span className="font-medium text-foreground">{o.customer_name}</span>
+                    {" · "}{o.customer_phone}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {o.items?.length
+                      ? o.items.map((it) => `${it.product_name} (x${it.quantity})`).join(", ")
+                      : "No item details"}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{o.delivery_address}, {o.city}</p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <span className="text-sm font-bold">{formatCurrency(o.cod_amount)}</span>
+                  <ApprovalActions
+                    orderId={o.id}
+                    orderNumber={o.order_number}
+                    onDone={() => refresh()}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          {data.total > data.rows.length ? (
+            <p className="px-4 py-2 text-center text-xs text-muted-foreground">
+              + {data.total - data.rows.length} more — see all orders
+            </p>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function AdminDashboardPage() {
   const [preset, setPreset] = useState("30d");
@@ -69,6 +154,9 @@ export default function AdminDashboardPage() {
           </div>
         </Link>
       ) : null}
+
+      {/* Worker orders waiting for approval — approve triggers Flaship booking */}
+      <PendingApprovalsCard />
 
       {/* Order stats */}
       <section aria-label="Order statistics">

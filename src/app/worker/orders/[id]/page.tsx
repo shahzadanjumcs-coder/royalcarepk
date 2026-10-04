@@ -4,13 +4,13 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, useApi, ApiError } from "@/lib/client";
 import { PageHeader, PageSpinner, ErrorState } from "@/components/app/states";
-import { OrderStatusBadge } from "@/components/app/badges";
+import { OrderStatusBadge, ApprovalStatusBadge, BookingStatusBadge } from "@/components/app/badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import type { Order, OrderItem, OrderStatusHistory, Shipment, ShipmentTracking } from "@/lib/types";
-import { ArrowLeft, CheckCircle2, Loader2, RotateCcw, Truck, MapPin, Phone } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Loader2, RotateCcw, Truck, MapPin, Phone, XCircle, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DetailData {
@@ -61,11 +61,75 @@ export default function WorkerOrderDetailPage({ params }: { params: Promise<{ id
       <PageHeader
         title={order.order_number}
         description={formatDateTime(order.created_at)}
-        actions={<OrderStatusBadge status={order.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <ApprovalStatusBadge status={order.approval_status} />
+            <OrderStatusBadge status={order.status} />
+          </div>
+        }
       />
 
       {msg ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div> : null}
       {err ? <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{err}</div> : null}
+
+      {/* Approval status — the worker always sees where their order stands */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            {order.approval_status === "REJECTED" ? (
+              <XCircle className="h-4 w-4 text-rose-500" />
+            ) : order.approval_status === "APPROVED" ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            ) : (
+              <Clock className="h-4 w-4 text-amber-500" />
+            )}
+            Approval status
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm">
+          {order.approval_status === "PENDING" ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <p className="font-medium text-amber-800">Pending Admin Approval</p>
+              <p className="mt-0.5 text-xs text-amber-700">
+                Submitted {order.submitted_at ? formatDateTime(order.submitted_at) : ""} — an admin will review this
+                order. Courier booking happens only after approval.
+              </p>
+            </div>
+          ) : order.approval_status === "REJECTED" ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5">
+              <p className="font-medium text-rose-800">Rejected</p>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-rose-600">Reason</p>
+              <p className="text-sm text-rose-700">{order.rejection_reason ?? "—"}</p>
+              {order.rejected_at ? <p className="mt-1 text-[11px] text-rose-500">{formatDateTime(order.rejected_at)}</p> : null}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+              <p className="font-medium text-emerald-800">Approved</p>
+              <p className="mt-0.5 text-xs text-emerald-700">
+                Approved {order.approved_at ? formatDateTime(order.approved_at) : ""} — handed over to the courier
+                booking flow.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Courier booking (visible once booked) */}
+      {order.tracking_number ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Package className="h-4 w-4 text-muted-foreground" /> Courier booking
+              <BookingStatusBadge status={order.booking_status} />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+            <p><span className="text-muted-foreground">CN:</span> <span className="font-semibold">{order.tracking_number}</span></p>
+            <p><span className="text-muted-foreground">Courier:</span> {order.flaship_courier_name ?? "—"}</p>
+            <p><span className="text-muted-foreground">Booked:</span> {formatDateTime(order.booked_at)}</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Customer card — call button for mobile riders */}
       <Card>

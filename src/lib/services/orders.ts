@@ -9,6 +9,13 @@ import { isValidPhone } from "@/lib/utils";
 
 export class OrderError extends Error {}
 
+/** Roles allowed to approve / reject worker orders. Workers can NEVER approve. */
+export const APPROVAL_ROLES = ["super_admin", "admin"] as const;
+
+export function canApprove(role: string | undefined): boolean {
+  return role === "super_admin" || role === "admin";
+}
+
 /** Allowed status transitions (pragmatic courier workflow). */
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   CREATED: ["PENDING", "ASSIGNED", "CANCELLED"],
@@ -50,6 +57,9 @@ export async function createOrder(session: Actor, input: CreateOrderInput): Prom
   if (!input.city?.trim()) throw new OrderError("Delivery city is required.");
   if (input.discount < 0) throw new OrderError("Discount cannot be negative.");
 
+  // Worker submissions are priced at the catalogue price — the client's
+  // unit_price/discount are NEVER trusted for workers.
+  const isWorkerSubmission = session.role === "worker";
   const productIds = input.items.map((i) => i.product_id);
   let subtotal = 0;
   const itemRows: { product_id: string; product_name: string; sku: string; quantity: number; unit_price: number; line_total: number }[] = [];
@@ -62,7 +72,9 @@ export async function createOrder(session: Actor, input: CreateOrderInput): Prom
     if (product.status !== "active") throw new OrderError(`Product "${product.name}" is inactive.`);
     const qty = Math.floor(Number(item.quantity));
     if (!qty || qty <= 0) throw new OrderError("Item quantities must be positive numbers.");
-    const unit = Number(item.unit_price ?? product.selling_price);
+    const unit = isWorkerSubmission
+      ? product.selling_price // catalogue price only — workers cannot set prices
+      : Number(item.unit_price ?? product.selling_price);
     if (unit < 0) throw new OrderError("Unit price cannot be negative.");
     subtotal += unit * qty;
     itemRows.push({
@@ -74,7 +86,7 @@ export async function createOrder(session: Actor, input: CreateOrderInput): Prom
       line_total: unit * qty,
     });
   }
-  const total = subtotal - input.discount;
+  const total = isWorkerSubmission ? subtotal : subtotal - input.discount;
   if (total < 0) throw new OrderError("Discount cannot exceed the order total.");
 
   // ---- customer: link existing or create/find by phone ----
@@ -113,13 +125,33 @@ export async function createOrder(session: Actor, input: CreateOrderInput): Prom
     commissionRate = worker.commission_rate;
   }
 
+  // ---- approval workflow: worker-submitted orders start PENDING and must be
+  // approved by an admin before Flaship booking. Orders created by admins are
+  // inherently approved (existing behaviour preserved). A worker can only
+  // create orders for themselves — the session decides, never the client. ----
+  if (isWorkerSubmission) {
+    workerId = session.userId!;
+    const self = await store.get<{ id: string; role: string; status: string; commission_rate: number; name: string; email: string; worker_code: string | null }>(
+      "profiles",
+      workerId
+    );
+    if (!self || self.role !== "worker" || self.status !== "active") {
+      throw new OrderError("Your worker account is not active.");
+    }
+    commissionRate = self.commission_rate;
+  }
+
   // ---- create order ----
   const orderNumber = await generateOrderNumber();
+  const nowIso = new Date().toISOString();
+  const workerProfile = isWorkerSubmission
+    ? await store.get<{ name: string; email: string; worker_code: string | null }>("profiles", workerId!)
+    : null;
   const order = await store.insert<Order>("orders", {
     order_number: orderNumber,
     customer_id: customerId,
     worker_id: workerId,
-    status: workerId ? "ASSIGNED" : "PENDING",
+    status: isWorkerSubmission ? "PENDING" : workerId ? "ASSIGNED" : "PENDING",
     subtotal,
     discount: input.discount,
     total,
@@ -130,6 +162,14 @@ export async function createOrder(session: Actor, input: CreateOrderInput): Prom
     commission_rate: commissionRate,
     commission_rate_locked_at: workerId ? new Date().toISOString() : null,
     booking_status: "not_booked",
+    approval_status: isWorkerSubmission ? "PENDING" : "APPROVED",
+    submitted_at: isWorkerSubmission ? nowIso : null,
+    submitted_by: isWorkerSubmission ? session.userId : null,
+    approved_at: isWorkerSubmission ? null : nowIso,
+    approved_by: isWorkerSubmission ? null : session.userId,
+    worker_name_snapshot: workerProfile?.name ?? null,
+    worker_email_snapshot: workerProfile?.email ?? null,
+    worker_code_snapshot: workerProfile?.worker_code ?? null,
     created_by: session.userId,
   });
 
@@ -156,7 +196,7 @@ export async function createOrder(session: Actor, input: CreateOrderInput): Prom
   await reserveForOrder(itemRows, order.id, orderNumber, session.userId);
 
   // ---- side effects ----
-  if (workerId) {
+  if (workerId && !isWorkerSubmission) {
     await notifyWorker(workerId, {
       title: "New order assigned",
       message: `Order ${orderNumber} has been assigned to you.`,
@@ -164,18 +204,34 @@ export async function createOrder(session: Actor, input: CreateOrderInput): Prom
       link: `/worker/orders/${order.id}`,
     });
   }
-  await notifyAdmins({
-    title: "New order created",
-    message: `Order ${orderNumber} (Rs ${total.toLocaleString()}) was created.`,
-    type: "info",
-    link: `/admin/orders/${order.id}`,
-  });
+  if (isWorkerSubmission) {
+    await notifyAdmins({
+      title: "New order waiting for approval",
+      message: `Worker ${workerProfile?.name ?? session.name ?? ""} submitted order ${orderNumber} (Rs ${total.toLocaleString()}) for approval.`,
+      type: "info",
+      link: `/admin/orders/${order.id}`,
+    });
+    await logAudit({
+      session,
+      action: "order.submitted",
+      entity: "orders",
+      entityId: order.id,
+      newData: { order_number: orderNumber, total, worker_id: workerId, approval_status: "PENDING" },
+    });
+  } else {
+    await notifyAdmins({
+      title: "New order created",
+      message: `Order ${orderNumber} (Rs ${total.toLocaleString()}) was created.`,
+      type: "info",
+      link: `/admin/orders/${order.id}`,
+    });
+  }
   await logAudit({
     session,
     action: "order.created",
     entity: "orders",
     entityId: order.id,
-    newData: { order_number: orderNumber, total, worker_id: workerId },
+    newData: { order_number: orderNumber, total, worker_id: workerId, approval_status: isWorkerSubmission ? "PENDING" : "APPROVED" },
   });
 
   return order;
@@ -309,4 +365,115 @@ export async function workerUpdateStatus(
     throw new OrderError(`As a worker you cannot change status from ${order.status} to ${newStatus}.`);
   }
   await changeOrderStatus(session, orderId, newStatus, note ?? "Updated by worker");
+}
+
+// ============================================================
+// Worker order approval workflow
+// ============================================================
+
+/**
+ * Approve a worker-submitted order. Callers must be admin/super_admin (route
+ * level). The order is marked APPROVED first; Flaship booking is triggered by
+ * the route AFTER the approval is persisted. If booking fails the order stays
+ * APPROVED and the error is surfaced for a safe retry.
+ */
+export async function approveOrder(session: Actor, orderId: string): Promise<Order> {
+  if (!canApprove(session.role)) {
+    throw new OrderError("Only admins can approve orders.");
+  }
+  const order = await store.get<Order>("orders", orderId);
+  if (!order) throw new OrderError("Order not found.");
+
+  const approval = order.approval_status ?? "APPROVED"; // rows created pre-migration are approved
+  if (approval === "APPROVED") return order; // idempotent — safe to call again
+  if (approval === "REJECTED") {
+    throw new OrderError("This order was rejected and cannot be approved.");
+  }
+
+  const now = new Date().toISOString();
+  const updated = await store.update<Order>("orders", orderId, {
+    approval_status: "APPROVED",
+    approved_by: session.userId ?? null,
+    approved_at: now,
+  });
+
+  await store.insert("order_status_history", {
+    order_id: orderId,
+    status: order.status,
+    note: `Approved by ${session.name ?? "admin"} — cleared for Flaship booking`,
+    created_by: session.userId ?? null,
+  });
+  if (order.worker_id) {
+    await notifyWorker(order.worker_id, {
+      title: "Order approved",
+      message: `Your order ${order.order_number} has been approved and submitted for courier booking.`,
+      type: "success",
+      link: `/worker/orders/${orderId}`,
+    });
+  }
+  await logAudit({
+    session,
+    action: "order.approved",
+    entity: "orders",
+    entityId: orderId,
+    oldData: { approval_status: "PENDING" },
+    newData: { approval_status: "APPROVED", approved_at: now },
+  });
+  return updated;
+}
+
+/**
+ * Reject a worker-submitted order with a mandatory reason. Rejecting also
+ * cancels the order (releases the stock reservation) and notifies the worker
+ * with the reason. Only PENDING orders can be rejected.
+ */
+export async function rejectOrder(session: Actor, orderId: string, reason: string): Promise<Order> {
+  if (!canApprove(session.role)) {
+    throw new OrderError("Only admins can reject orders.");
+  }
+  const trimmed = (reason ?? "").trim();
+  if (!trimmed) {
+    throw new OrderError("A rejection reason is required.");
+  }
+  const order = await store.get<Order>("orders", orderId);
+  if (!order) throw new OrderError("Order not found.");
+
+  const approval = order.approval_status ?? "APPROVED";
+  if (approval !== "PENDING") {
+    throw new OrderError("Only orders waiting for approval can be rejected.");
+  }
+  if (order.status === "CANCELLED") {
+    throw new OrderError("This order is already cancelled.");
+  }
+
+  const now = new Date().toISOString();
+  const updated = await store.update<Order>("orders", orderId, {
+    approval_status: "REJECTED",
+    rejected_by: session.userId ?? null,
+    rejected_at: now,
+    rejection_reason: trimmed,
+  });
+
+  await logAudit({
+    session,
+    action: "order.rejected",
+    entity: "orders",
+    entityId: orderId,
+    oldData: { approval_status: "PENDING" },
+    newData: { approval_status: "REJECTED", rejection_reason: trimmed, rejected_at: now },
+  });
+
+  // Cancel the order so the stock reservation is released and the courier
+  // lifecycle is closed. approval_status keeps the REJECTED record.
+  await changeOrderStatus(session, orderId, "CANCELLED", `Rejected by ${session.name ?? "admin"}: ${trimmed}`);
+
+  if (order.worker_id) {
+    await notifyWorker(order.worker_id, {
+      title: "Order rejected",
+      message: `Your order ${order.order_number} has been rejected. Reason: ${trimmed}`,
+      type: "warning",
+      link: `/worker/orders/${orderId}`,
+    });
+  }
+  return updated;
 }

@@ -179,6 +179,15 @@ export const ORDER_STATUSES: OrderStatus[] = [
 
 export type BookingStatus = "not_booked" | "pending" | "booked" | "failed";
 
+/** Worker order approval workflow — separate from the courier order_status. */
+export type OrderApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export const APPROVAL_LABELS: Record<OrderApprovalStatus, string> = {
+  PENDING: "Pending Approval",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+};
+
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -215,6 +224,19 @@ export interface Order {
   booking_error: string | null;
   booked_at: string | null;
   last_synced_at: string | null;
+  // worker approval workflow (PENDING only for worker-submitted orders)
+  approval_status?: OrderApprovalStatus;
+  submitted_at?: string | null;
+  submitted_by?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  rejected_at?: string | null;
+  rejected_by?: string | null;
+  rejection_reason?: string | null;
+  // historical worker identity (survives worker account deletion)
+  worker_name_snapshot?: string | null;
+  worker_email_snapshot?: string | null;
+  worker_code_snapshot?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -274,7 +296,9 @@ export const COMMISSION_TYPE_LABELS: Record<CommissionType, string> = {
 
 export interface CommissionTransaction {
   id: string;
-  worker_id: string;
+  worker_id: string | null;
+  /** captured at insert time; survives worker account deletion */
+  worker_name_snapshot?: string | null;
   order_id: string | null;
   type: CommissionType;
   /** signed amount; positive credits, negative deductions */
@@ -311,7 +335,9 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 
 export interface WorkerPayment {
   id: string;
-  worker_id: string;
+  worker_id: string | null;
+  /** captured at insert time; survives worker account deletion */
+  worker_name_snapshot?: string | null;
   amount: number;
   method: PaymentMethod;
   payment_date: string;

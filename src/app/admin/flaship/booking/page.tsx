@@ -22,7 +22,7 @@ export default function FlashipBookingPage() {
   const { data: cfg } = useApi<{ mode: string; api_key_set: boolean }>("/api/flaship/catalog");
   const { data: catalog } = useApi<{ couriers: CatalogCarrier[]; pickups: CatalogPickup[] }>("/api/flaship/catalog");
   const { data, loading, error, refresh } = useList<Order>(
-    `/api/orders${buildQuery({ status: "UNBOOKED", page, perPage: 15 })}`,
+    `/api/orders${buildQuery({ status: "UNBOOKED", approval: "APPROVED", page, perPage: 15 })}`,
     [page]
   );
   const [busyId, setBusyId] = useState<string | null>(null);

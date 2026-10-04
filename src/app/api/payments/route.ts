@@ -37,7 +37,11 @@ export const GET = withAuth("any", async (session, req) => {
   const { rows, total } = await store.list<WorkerPayment>("worker_payments", opts);
   const { rows: workers } = await store.list<{ id: string; name: string }>("profiles");
   const wMap = new Map(workers.map((w) => [w.id, w.name]));
-  const enriched = rows.map((p) => ({ ...p, worker_name: wMap.get(p.worker_id) ?? "—" }));
+  const enriched = rows.map((p) => ({
+    ...p,
+    // prefer the live name, fall back to the deletion-proof snapshot
+    worker_name: wMap.get(p.worker_id ?? "") ?? p.worker_name_snapshot ?? "Deleted worker",
+  }));
   return ok({ rows: enriched, total });
 });
 
@@ -54,8 +58,8 @@ export const POST = withAuth(["super_admin", "admin"], async (session, req) => {
     const parsed = schema.safeParse(await req.json());
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Invalid data.", 422);
 
-    const worker = await store.get("profiles", parsed.data.worker_id);
-    if (!worker || (worker as unknown as { role: string }).role !== "worker") {
+    const worker = await store.get<{ role: string; name: string }>("profiles", parsed.data.worker_id);
+    if (!worker || worker.role !== "worker") {
       return fail("Selected user is not a worker.", 422);
     }
 
@@ -70,6 +74,7 @@ export const POST = withAuth(["super_admin", "admin"], async (session, req) => {
 
     const payment = await store.insert("worker_payments", {
       worker_id: parsed.data.worker_id,
+      worker_name_snapshot: worker.name, // survives worker account deletion
       amount: parsed.data.amount,
       method: parsed.data.method,
       payment_date: parsed.data.payment_date,

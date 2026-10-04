@@ -6,18 +6,23 @@ import { api, useApi, ApiError } from "@/lib/client";
 import { PageHeader, PageSpinner, ErrorState } from "@/components/app/states";
 import { UserStatusBadge } from "@/components/app/badges";
 import { DataTable, type Column } from "@/components/app/data-table";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormDialog } from "@/components/app/form-dialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { WorkerDetail } from "@/lib/services/workers";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { useSession } from "@/lib/use-session";
 
 export default function WorkerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { data, loading, error, refresh } = useApi<{ worker: WorkerDetail }>(`/api/workers/${id}`);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const { session } = useSession();
+  const isSuperAdmin = session?.role === "super_admin";
 
   if (loading) return <PageSpinner />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
@@ -56,6 +61,11 @@ export default function WorkerDetailPage({ params }: { params: Promise<{ id: str
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-1.5 h-4 w-4" /> Edit
             </Button>
+            {isSuperAdmin ? (
+              <Button variant="outline" className="border-rose-200 text-rose-700 hover:bg-rose-50" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -117,6 +127,21 @@ export default function WorkerDetailPage({ params }: { params: Promise<{ id: str
           refresh();
         }}
       />
+
+      {isSuperAdmin ? (
+        <ConfirmDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          title={`Delete worker account ${w.name}?`}
+          description={`Are you sure you want to delete this worker account? This permanently removes ${w.name} (${w.email}) and they will no longer be able to sign in. Historical orders, payments, commissions, shipments and audit logs are NOT deleted — worker references on those records are kept with a name snapshot. Any order still pending approval will be rejected automatically. This action cannot be undone.`}
+          confirmLabel="Delete worker account"
+          destructive
+          onConfirm={async () => {
+            await api(`/api/workers/${id}`, { method: "DELETE" });
+            router.push("/admin/workers");
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useList, buildQuery, useDebounced } from "@/lib/client";
 import { PageHeader } from "@/components/app/states";
 import { SearchInput } from "@/components/app/filters";
 import { DataTable, type Column } from "@/components/app/data-table";
-import { OrderStatusBadge, BookingStatusBadge } from "@/components/app/badges";
+import { OrderStatusBadge, BookingStatusBadge, ApprovalStatusBadge } from "@/components/app/badges";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
 import type { Order } from "@/lib/types";
-import { ShoppingBag } from "lucide-react";
+import { Plus, ShoppingBag } from "lucide-react";
 
 const TABS = [
   { key: "ALL", label: "All" },
@@ -47,6 +48,7 @@ export default function WorkerOrdersPage() {
       { key: "customer_name", header: "Customer", render: (o) => <div><p>{o.customer_name}</p><p className="text-xs text-muted-foreground">{o.customer_phone}</p></div> },
       { key: "city", header: "City", className: "text-muted-foreground", hideInCard: true },
       { key: "cod_amount", header: "COD", render: (o) => <span className="font-semibold">{formatCurrency(o.cod_amount)}</span> },
+      { key: "approval_status", header: "Approval", render: (o) => <ApprovalStatusBadge status={o.approval_status} /> },
       { key: "status", header: "Status", render: (o) => <OrderStatusBadge status={o.status} /> },
       { key: "tracking_number", header: "CN", render: (o) => o.tracking_number ?? "—", hideInCard: true },
     ],
@@ -55,7 +57,17 @@ export default function WorkerOrdersPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
-      <PageHeader title="My Orders" description="Only orders assigned to you are visible here" />
+      <PageHeader
+        title="My Orders"
+        description="Only your orders are visible here — new submissions wait for admin approval"
+        actions={
+          <Button asChild>
+            <Link href="/worker/orders/new">
+              <Plus className="mr-1.5 h-4 w-4" /> New Order
+            </Link>
+          </Button>
+        }
+      />
 
       <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin" role="tablist">
         {TABS.map((t) => (
@@ -92,13 +104,16 @@ export default function WorkerOrdersPage() {
           <button onClick={() => router.push(`/worker/orders/${o.id}`)} className="w-full rounded-xl border border-border bg-card p-4 text-left active:bg-muted/50">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-semibold">{o.order_number}</p>
-              <OrderStatusBadge status={o.status} />
+              <ApprovalStatusBadge status={o.approval_status} />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{o.customer_name} · {o.customer_phone}</p>
             <p className="text-xs text-muted-foreground">{o.delivery_address}, {o.city}</p>
             <div className="mt-2 flex items-center justify-between">
               <span className="text-sm font-bold">{formatCurrency(o.cod_amount)}</span>
-              <BookingStatusBadge status={o.booking_status} />
+              <div className="flex items-center gap-1.5">
+                <OrderStatusBadge status={o.status} />
+                <BookingStatusBadge status={o.booking_status} />
+              </div>
             </div>
           </button>
         )}

@@ -484,6 +484,24 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
   const order = await store.get<Order>("orders", orderId);
   if (!order) throw new FlashipError("Order not found.");
 
+  // ---- APPROVAL GATE (critical security rule) ----
+  // Flaship must NEVER be called for an order that has not been approved by an
+  // admin. Worker-submitted orders are PENDING until an admin approves them;
+  // rejected orders can never be booked. Orders created before the approval
+  // workflow (or directly by admins) carry approval_status = 'APPROVED'.
+  if (order.approval_status && order.approval_status !== "APPROVED") {
+    await logAudit({
+      session,
+      action: "flaship.booking_blocked",
+      entity: "orders",
+      entityId: orderId,
+      newData: { reason: `approval_status=${order.approval_status}`, order_number: order.order_number },
+    });
+    throw new FlashipError(
+      `Order ${order.order_number} has not been approved yet — Flaship booking is blocked until an admin approves it.`
+    );
+  }
+
   // ---- duplicate prevention ----
   if (order.flaship_booking_id || order.tracking_number || order.booking_status === "booked") {
     throw new FlashipError(`Order ${order.order_number} is already booked (CN ${order.tracking_number}). Duplicate bookings are blocked.`);

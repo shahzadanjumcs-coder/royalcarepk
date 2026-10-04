@@ -46,6 +46,27 @@ export function UserStatusBadge({ status }: { status: string }) {
   );
 }
 
+const APPROVAL_STYLES: Record<string, string> = {
+  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
+  APPROVED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  REJECTED: "bg-rose-50 text-rose-700 border-rose-200",
+};
+
+const APPROVAL_LABELS: Record<string, string> = {
+  PENDING: "Pending Approval",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+};
+
+export function ApprovalStatusBadge({ status, className }: { status?: string | null; className?: string }) {
+  const s = status ?? "APPROVED";
+  return (
+    <Badge variant="outline" className={cn("font-medium", APPROVAL_STYLES[s] ?? "", className)}>
+      {APPROVAL_LABELS[s] ?? s}
+    </Badge>
+  );
+}
+
 const MOVEMENT_STYLES: Record<string, string> = {
   PURCHASE: "bg-emerald-50 text-emerald-700 border-emerald-200",
   STOCK_IN: "bg-emerald-50 text-emerald-700 border-emerald-200",

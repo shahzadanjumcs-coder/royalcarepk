@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, ShoppingCart, Users, HardHat, Network, PercentCircle, Wallet, Boxes, Tags, Building2, Truck, Radar, BookOpen, BarChart3, Bell, ScrollText, Settings, MapPin, Globe, Handshake, ArrowDownToLine, ArrowUpFromLine, History, ClipboardList, FileSpreadsheet, Landmark } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Users, HardHat, Network, PercentCircle, Wallet, Boxes, Tags, Building2, Truck, Radar, BookOpen, BarChart3, Bell, ScrollText, Settings, MapPin, Globe, Handshake, ArrowDownToLine, ArrowUpFromLine, History, ClipboardList, ClipboardCheck, FileSpreadsheet, Landmark } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface NavItem {
@@ -23,6 +23,7 @@ export const ADMIN_NAV: NavSection[] = [
     title: "Orders",
     items: [
       { label: "All Orders", href: "/admin/orders", icon: ShoppingCart },
+      { label: "Pending Approvals", href: "/admin/orders?approval=PENDING", icon: ClipboardCheck },
       { label: "Pending", href: "/admin/orders?status=PENDING", icon: ClipboardList },
       { label: "Booked", href: "/admin/orders?status=BOOKED", icon: BookOpen },
       { label: "In Transit", href: "/admin/orders?status=IN_TRANSIT", icon: Truck },
@@ -94,6 +95,7 @@ export const ADMIN_NAV: NavSection[] = [
 export const WORKER_NAV: NavItem[] = [
   { label: "Dashboard", href: "/worker", icon: LayoutDashboard, exact: true },
   { label: "My Orders", href: "/worker/orders", icon: ShoppingCart },
+  { label: "New Order", href: "/worker/orders/new", icon: ClipboardList },
   { label: "Earnings", href: "/worker/earnings", icon: PercentCircle },
   { label: "Payments", href: "/worker/payments", icon: Wallet },
   { label: "Profile", href: "/worker/profile", icon: Users },

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, useApi, ApiError } from "@/lib/client";
 import { PageHeader, PageSpinner, ErrorState } from "@/components/app/states";
-import { OrderStatusBadge, BookingStatusBadge, CommissionTypeBadge } from "@/components/app/badges";
+import { OrderStatusBadge, BookingStatusBadge, CommissionTypeBadge, ApprovalStatusBadge } from "@/components/app/badges";
+import { ApprovalActions } from "@/components/app/approval-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,6 +26,8 @@ import {
   UserPlus,
   History as HistoryIcon,
   Wallet,
+  ClipboardCheck,
+  XCircle,
 } from "lucide-react";
 
 interface DetailData {
@@ -167,6 +170,49 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       <div className="grid gap-4 xl:grid-cols-3">
         {/* LEFT column */}
         <div className="space-y-4 xl:col-span-2">
+          {/* Approval workflow (worker-submitted orders) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ClipboardCheck className="h-4 w-4 text-muted-foreground" /> Approval workflow
+                <ApprovalStatusBadge status={order.approval_status} />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {order.approval_status === "PENDING" ? (
+                <>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm">
+                    <p className="font-medium text-amber-800">Waiting for approval</p>
+                    <p className="mt-0.5 text-xs text-amber-700">
+                      Submitted {order.submitted_at ? formatDateTime(order.submitted_at) : "—"}. Flaship booking is
+                      blocked until this order is approved.
+                    </p>
+                  </div>
+                  <ApprovalActions orderId={order.id} orderNumber={order.order_number} size="default" onDone={() => refresh()} />
+                </>
+              ) : order.approval_status === "REJECTED" ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm">
+                  <p className="flex items-center gap-1.5 font-medium text-rose-800">
+                    <XCircle className="h-4 w-4" /> Rejected
+                  </p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-rose-600">Reason</p>
+                  <p className="text-sm text-rose-700">{order.rejection_reason ?? "—"}</p>
+                  <p className="mt-1 text-[11px] text-rose-500">{order.rejected_at ? formatDateTime(order.rejected_at) : ""}</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm">
+                  <p className="flex items-center gap-1.5 font-medium text-emerald-800">
+                    <CheckCheck className="h-4 w-4" /> Approved
+                  </p>
+                  <p className="mt-0.5 text-xs text-emerald-700">
+                    Approved {order.approved_at ? formatDateTime(order.approved_at) : "—"}. Flaship booking may proceed
+                    (retry available if it previously failed).
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Status actions */}
           <Card>
             <CardHeader className="pb-3">
@@ -186,7 +232,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       {busy === "sync" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
                       Sync tracking
                     </Button>
-                    {order.booking_status === "failed" || !order.tracking_number ? (
+                    {/* Booking is only possible for approved orders — hidden while pending */}
+                    {order.approval_status !== "PENDING" && (order.booking_status === "failed" || !order.tracking_number) ? (
                       <Button size="sm" disabled={busy === "book"} onClick={book}>
                         {busy === "book" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                         {order.booking_status === "failed" ? "Retry booking" : "Book with Flaship"}

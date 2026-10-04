@@ -17,7 +17,8 @@ export const GET = withAuth("any", async (session, req) => {
   const oMap = new Map(orders.map((o) => [o.id, o]));
   const enriched = rows.map((t) => ({
     ...t,
-    worker_name: pMap.get(t.worker_id) ?? "—",
+    // prefer the live name, fall back to the deletion-proof snapshot
+    worker_name: pMap.get(t.worker_id ?? "") ?? t.worker_name_snapshot ?? "Deleted worker",
     order_number: t.order_id ? (oMap.get(t.order_id)?.order_number ?? "—") : null,
     cod_amount: t.order_id ? (oMap.get(t.order_id)?.cod_amount ?? null) : null,
   }));

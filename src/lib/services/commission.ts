@@ -23,8 +23,17 @@ async function hasTransaction(orderId: string, type: CommissionType): Promise<bo
   return !!existing;
 }
 
+/** Live worker name, falling back to deletion-proof snapshots already on file. */
+async function workerNameSnapshot(workerId: string | null | undefined, fallback?: string | null): Promise<string | null> {
+  if (workerId) {
+    const p = await store.get<{ name: string }>("profiles", workerId);
+    if (p?.name) return p.name;
+  }
+  return fallback ?? null;
+}
+
 export async function creditDeliveredCommission(orderId: string): Promise<void> {
-  const order = await store.get<{ id: string; worker_id: string | null; cod_amount: number; total: number; commission_rate: number | null; order_number: string }>(
+  const order = await store.get<{ id: string; worker_id: string | null; cod_amount: number; total: number; commission_rate: number | null; order_number: string; worker_name_snapshot?: string | null }>(
     "orders",
     orderId
   );
@@ -39,6 +48,7 @@ export async function creditDeliveredCommission(orderId: string): Promise<void> 
   try {
     await store.insert("commission_transactions", {
       worker_id: order.worker_id,
+      worker_name_snapshot: await workerNameSnapshot(order.worker_id, order.worker_name_snapshot),
       order_id: orderId,
       type: "DELIVERED_COMMISSION" as CommissionType,
       amount,
@@ -62,7 +72,7 @@ export async function deductReturnedCommission(orderId: string): Promise<void> {
   if (!order || !order.worker_id) return;
   if (await hasTransaction(orderId, "RETURN_ADJUSTMENT")) return; // idempotent
 
-  const delivered = await store.first<{ amount: number; worker_id: string }>("commission_transactions", {
+  const delivered = await store.first<{ amount: number; worker_id: string; worker_name_snapshot?: string | null }>("commission_transactions", {
     order_id: orderId,
     type: "DELIVERED_COMMISSION",
   });
@@ -72,6 +82,7 @@ export async function deductReturnedCommission(orderId: string): Promise<void> {
   try {
     await store.insert("commission_transactions", {
       worker_id: delivered.worker_id,
+      worker_name_snapshot: await workerNameSnapshot(delivered.worker_id, delivered.worker_name_snapshot),
       order_id: orderId,
       type: "RETURN_ADJUSTMENT" as CommissionType,
       amount: -Math.abs(delivered.amount),
@@ -99,6 +110,7 @@ export async function addManualAdjustment(params: {
   if (!params.amount) throw new CommissionError("Adjustment amount cannot be zero.");
   await store.insert("commission_transactions", {
     worker_id: params.workerId,
+    worker_name_snapshot: await workerNameSnapshot(params.workerId),
     order_id: params.orderId ?? null,
     type: "MANUAL_ADJUSTMENT" as CommissionType,
     amount: params.amount,

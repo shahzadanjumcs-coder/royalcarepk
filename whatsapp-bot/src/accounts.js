@@ -36,14 +36,16 @@ const { createBotLogger } = require("./logger");
 // in 'init queries'" with statusCode 408 on slow networks) are non-fatal —
 // the first occurrence is logged, identical repeats collapse for 10 minutes.
 const logger = createBotLogger("error");
-const RECONNECT_BASE_MS = 10 * 1000;
+// Reconnect backoff base. WHATSAPP_RECONNECT_BASE_MS exists mainly for tests;
+// production default stays 10s.
+const RECONNECT_BASE_MS = Number(process.env.WHATSAPP_RECONNECT_BASE_MS) || 10 * 1000;
 const RECONNECT_MAX_MS = 5 * 60 * 1000;
 
 class AccountManager {
   constructor(sb, sessionDir) {
     this.sb = sb;
     this.sessionDir = sessionDir;
-    /** accountId -> { sock, reconnectTimer, reconnectAttempt } */
+    /** accountId -> { sock, reconnectTimer, reconnectAttempt, starting } */
     this.socks = new Map();
   }
 
@@ -60,47 +62,101 @@ class AccountManager {
     return this.isConnected(accountId) ? this.socks.get(accountId).sock : null;
   }
 
-  /** Start a socket for an account if one is not already running. */
+  /**
+   * Start a socket for an account unless one is already live, mid-start, or
+   * waiting on a reconnect timer. Conservative on purpose: reconcile() calls
+   * this every 15s, so it must never defeat a pending reconnect backoff.
+   */
   async ensureStarted(account) {
-    if (this.socks.has(account.id)) return;
+    const entry = this.socks.get(account.id);
+    if (entry?.sock || entry?.starting || entry?.reconnectTimer) return;
     await this.start(account);
   }
 
+  /**
+   * Explicit user-driven start (admin "connect" command): supersedes any
+   * pending reconnect timer so a manual click always takes effect now.
+   */
+  async startNow(account) {
+    const entry = this.socks.get(account.id);
+    if (entry?.sock || entry?.starting) return;
+    await this.start(account);
+  }
+
+  /**
+   * SINGLE-SOCKET INVARIANT: at most ONE Baileys socket per WhatsApp account,
+   * and at most ONE in-flight start() / pending reconnect timer per account.
+   * Two live sockets sharing one auth state make WhatsApp kill them with
+   * 440 connectionReplaced ("conflict") in an endless reconnect loop.
+   */
   async start(account, attempt = 0) {
-    if (this.socks.has(account.id)) return;
-    fs.mkdirSync(this.authDir(account.id), { recursive: true });
+    const existing = this.socks.get(account.id);
+    if (existing?.starting) return; // a start is already in flight — never fork a second one
+    if (existing?.sock) return; // a live socket already exists
+    if (existing?.reconnectTimer) clearTimeout(existing.reconnectTimer); // a fresh start supersedes any pending timer
 
-    const { state, saveCreds } = await useMultiFileAuthState(this.authDir(account.id));
-    let version;
+    this.socks.set(account.id, { sock: null, reconnectTimer: null, reconnectAttempt: attempt, starting: true });
     try {
-      ({ version } = await fetchLatestBaileysVersion());
-    } catch {
-      version = undefined; // offline fallback — Baileys uses its baked-in default
+      fs.mkdirSync(this.authDir(account.id), { recursive: true });
+
+      const { state, saveCreds } = await useMultiFileAuthState(this.authDir(account.id));
+      let version;
+      try {
+        ({ version } = await fetchLatestBaileysVersion());
+      } catch {
+        version = undefined; // offline fallback — Baileys uses its baked-in default
+      }
+
+      // Re-check after the awaits above: stop()/logout() may have removed the
+      // placeholder while we were reading auth state / fetching the version.
+      const current = this.socks.get(account.id);
+      if (!current || !current.starting) return;
+
+      const sock = makeWASocket({
+        version,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, logger),
+        },
+        logger,
+        printQRInTerminal: false,
+        browser: Browsers.ubuntu("Chrome"),
+        markOnlineOnConnect: false,
+        syncFullHistory: false,
+      });
+
+      this.socks.set(account.id, { sock, reconnectTimer: null, reconnectAttempt: attempt, starting: false });
+
+      sock.ev.on("creds.update", saveCreds);
+      sock.ev.on("connection.update", (update) => {
+        const entry = this.socks.get(account.id);
+        if (!entry || entry.sock !== sock) {
+          // Stale event from a superseded socket: ignore it AND make sure that
+          // socket is really dead so WhatsApp never sees two live connections.
+          try {
+            sock.end(new Error("superseded by a newer session for this account"));
+          } catch {
+            /* already closed */
+          }
+          return;
+        }
+        this.onConnectionUpdate(account.id, sock, update).catch((e) => console.error("[bot] connection.update handler:", e.message));
+      });
+
+      console.log(`[bot] starting session for "${account.name}" (${account.id})`);
+    } catch (e) {
+      const entry = this.socks.get(account.id);
+      if (entry && entry.starting && !entry.sock) this.socks.delete(account.id);
+      throw e;
     }
-
-    const sock = makeWASocket({
-      version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, logger),
-      },
-      logger,
-      printQRInTerminal: false,
-      browser: Browsers.ubuntu("Chrome"),
-      markOnlineOnConnect: false,
-      syncFullHistory: false,
-    });
-
-    this.socks.set(account.id, { sock, reconnectTimer: null, reconnectAttempt: attempt });
-    sock.ev.on("creds.update", saveCreds);
-    sock.ev.on("connection.update", (update) => {
-      this.onConnectionUpdate(account.id, sock, update).catch((e) => console.error("[bot] connection.update handler:", e.message));
-    });
-
-    console.log(`[bot] starting session for "${account.name}" (${account.id})`);
   }
 
   async onConnectionUpdate(accountId, sock, update) {
+    // Stale-socket guard: only the socket that currently owns the map entry
+    // may drive account state. Events from replaced/old sockets are ignored
+    // (the ev wrapper in start() also ends those sockets).
+    const entry = this.socks.get(accountId);
+    if (!entry || entry.sock !== sock) return;
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
@@ -121,8 +177,7 @@ class AccountManager {
     }
 
     if (connection === "open") {
-      const entry = this.socks.get(accountId);
-      if (entry) entry.reconnectAttempt = 0;
+      entry.reconnectAttempt = 0;
       const jid = sock.user?.id ?? "";
       const phone = String(jid.split("@")[0] || "").replace(/:[0-9]+$/, "");
       await updateAccount(this.sb, accountId, {
@@ -140,6 +195,10 @@ class AccountManager {
 
     if (connection === "close") {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
+      // Read this socket's attempt BEFORE dropping the entry — deleting first
+      // used to reset the backoff to attempt 1 (a constant ~10s) on every drop.
+      const attemptSoFar = entry.reconnectAttempt ?? 0;
+      if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
       this.socks.delete(accountId);
       const loggedOut = statusCode === DisconnectReason.loggedOut;
 
@@ -170,29 +229,36 @@ class AccountManager {
       console.log(
         `[bot] account ${accountId} disconnected (code ${statusCode ?? "unknown"}${transient ? ", transient" : ""}) — session files kept, reconnecting with backoff`
       );
-      await this.scheduleReconnect(accountId);
+      await this.scheduleReconnect(accountId, attemptSoFar);
     }
   }
 
-  async scheduleReconnect(accountId) {
+  async scheduleReconnect(accountId, attemptHint = null) {
     // re-read the row: a disabled/removed account must NOT reconnect
     const { data } = await this.sb.from("whatsapp_accounts").select("*").eq("id", accountId).maybeSingle();
     if (!data || !data.enabled) return;
-    const entry = this.socks.get(accountId);
-    const attempt = (entry?.reconnectAttempt ?? 0) + 1;
+    const existing = this.socks.get(accountId);
+    // SINGLE-TIMER GUARD: a socket may have been started (reconcile/command)
+    // or another reconnect scheduled while we awaited above — never overlap.
+    if (existing?.sock || existing?.starting || existing?.reconnectTimer) return;
+    const attempt = (attemptHint ?? existing?.reconnectAttempt ?? 0) + 1;
     // exponential backoff + small jitter: 10s, 20s, 40s, 80s … capped at 5min
     const exponential = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt - 1), RECONNECT_MAX_MS);
     const delay = Math.round(exponential + Math.random() * 1000);
     console.log(`[bot] reconnecting account ${accountId} in ${Math.round(delay / 1000)}s (attempt ${attempt})`);
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
+      // Fire only if this exact timer is still the scheduled one — a start(),
+      // stop() or newer scheduleReconnect() must never be double-fired.
+      const entry = this.socks.get(accountId);
+      if (!entry || entry.reconnectTimer !== timer) return;
       this.socks.delete(accountId);
-      try {
-        await this.start(data, attempt);
-      } catch (e) {
+      this.start(data, attempt).catch((e) => {
         console.error(`[bot] reconnect failed for ${accountId}:`, e.message);
-      }
+        // keep the backoff growing across persistent start failures
+        this.scheduleReconnect(accountId, attempt).catch(() => {});
+      });
     }, delay);
-    this.socks.set(accountId, { sock: null, reconnectTimer: timer, reconnectAttempt: attempt });
+    this.socks.set(accountId, { sock: null, reconnectTimer: timer, reconnectAttempt: attempt, starting: false });
   }
 
   /** Graceful stop (keeps session files so the next start re-uses them). */
@@ -261,7 +327,10 @@ class AccountManager {
     const ids = new Set(rows.map((r) => r.id));
 
     for (const account of rows) {
-      if (account.enabled && !this.socks.has(account.id)) {
+      // ensureStarted() itself skips accounts that are live, mid-start, or
+      // waiting on a reconnect timer — calling it unconditionally also heals
+      // any stale placeholder entries.
+      if (account.enabled) {
         try {
           await this.ensureStarted(account);
         } catch (e) {

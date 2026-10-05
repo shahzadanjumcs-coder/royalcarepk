@@ -48,6 +48,7 @@ npm test                  # optional: unit tests
 | `WHATSAPP_SESSION_DIR` | no | session storage folder (default `./sessions`) |
 | `WHATSAPP_POLL_MS` | no | poll interval for commands/queue (default 3000) |
 | `WHATSAPP_SEND_DELAY_MS` | no | fallback delay between sends (default 2500; admin setting wins) |
+| `WHATSAPP_RECONNECT_BASE_MS` | no | reconnect backoff base in ms (default 10000; doubles per attempt up to 5 min) |
 | `PORT` | no | local health endpoint port (default 3088, `0` disables) |
 
 ### Start / stop

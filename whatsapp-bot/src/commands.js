@@ -48,7 +48,8 @@ class CommandRunner {
         case "connect": {
           const { data: account } = await this.sb.from("whatsapp_accounts").select("*").eq("id", payload.account_id).maybeSingle();
           if (!account) throw new Error("Account row no longer exists.");
-          await this.manager.ensureStarted(account);
+          // explicit admin action: supersede any pending reconnect backoff
+          await this.manager.startNow(account);
           await this.finish(cmd.id, "done", "Session started. If pairing is needed the QR appears in the admin panel within seconds.");
           break;
         }

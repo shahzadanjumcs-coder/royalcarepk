@@ -23,6 +23,13 @@ const DEFAULT_ORDER_COLUMN: Partial<Record<TableName, string>> = {
   team_members: "joined_at",
   order_items: "id",
   shipment_tracking: "scanned_at",
+  shipments: "booked_at",
+  // 0004 table: has updated_at but NO created_at — the default created_at
+  // order made GET /api/whatsapp/settings 500 (Routing & Templates panel).
+  whatsapp_routing_settings: "updated_at",
+  // same table shape in 0004 (updated_at, no created_at) — currently only
+  // first()-ed, mapped so a future list() can never regress.
+  whatsapp_bot_settings: "updated_at",
 };
 
 export class SupabaseStore implements Store {

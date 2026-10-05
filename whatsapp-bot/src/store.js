@@ -58,4 +58,17 @@ async function writeAttemptLog(sb, queueId, attempt, status, accountId, error) {
   });
 }
 
-module.exports = { createSupabase, readBotSettings, readRouting, updateAccount, touchBotHeartbeat, writeAttemptLog };
+/**
+ * Store one incoming WhatsApp message in whatsapp_inbox (idempotent — the
+ * WhatsApp message id is the unique dedup key, so Baileys re-deliveries after
+ * a reconnect never create duplicates). Failures are logged, never thrown:
+ * a logging hiccup must never disturb the live WhatsApp session.
+ */
+async function writeInboxMessage(sb, row) {
+  const { error } = await sb
+    .from("whatsapp_inbox")
+    .insert(row, { onConflict: "wa_message_id", ignoreDuplicates: true });
+  if (error) console.error("[bot] inbox write failed:", error.message);
+}
+
+module.exports = { createSupabase, readBotSettings, readRouting, updateAccount, touchBotHeartbeat, writeAttemptLog, writeInboxMessage };

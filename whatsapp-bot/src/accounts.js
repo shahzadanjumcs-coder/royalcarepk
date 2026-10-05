@@ -28,8 +28,8 @@ const {
 
 const QRCode = require("qrcode");
 const qrcodeTerminal = require("qrcode-terminal");
-const { updateAccount } = require("./store");
-const { isTransientBaileysError } = require("./lib");
+const { updateAccount, writeInboxMessage } = require("./store");
+const { isTransientBaileysError, parseIncomingMessage } = require("./lib");
 const { createBotLogger } = require("./logger");
 
 // Deduped Baileys logger: transient internal errors (e.g. "unexpected error
@@ -128,6 +128,27 @@ class AccountManager {
       this.socks.set(account.id, { sock, reconnectTimer: null, reconnectAttempt: attempt, starting: false });
 
       sock.ev.on("creds.update", saveCreds);
+      // Incoming message capture. Fire-and-forget by design: parsing or DB
+      // failures here are logged and swallowed — they must NEVER throw into
+      // the socket, crash the bot or disturb the WhatsApp session. Only
+      // "notify" (real-time) events are logged; "append" is history sync
+      // which would flood the inbox with old messages after every reconnect.
+      sock.ev.on("messages.upsert", ({ messages, type }) => {
+        const live = this.socks.get(account.id);
+        if (!live || live.sock !== sock) return; // stale event from a superseded socket
+        if (type !== "notify" || !Array.isArray(messages)) return;
+        for (const m of messages) {
+          try {
+            const row = parseIncomingMessage(account.id, m);
+            if (!row) continue; // fromMe echo / status@broadcast / protocol noise
+            writeInboxMessage(this.sb, row)
+              .then(() => console.log(`[bot] inbox: stored message from ${row.sender_phone ?? row.chat_jid}${row.sender_name ? ` (${row.sender_name})` : ""}`))
+              .catch((e) => console.error("[bot] inbox write error:", e.message));
+          } catch (e) {
+            console.error("[bot] inbox parse error:", e.message);
+          }
+        }
+      });
       sock.ev.on("connection.update", (update) => {
         const entry = this.socks.get(account.id);
         if (!entry || entry.sock !== sock) {

@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Pause, Play, Wifi, WifiOff } from "lucide-react";
 import { WhatsAppAccountsPanel } from "@/components/app/whatsapp/accounts-panel";
 import { WhatsAppMessagesPanel } from "@/components/app/whatsapp/messages-panel";
+import { WhatsAppInboxPanel } from "@/components/app/whatsapp/inbox-panel";
 import { WhatsAppRoutingPanel } from "@/components/app/whatsapp/routing-panel";
 import { WhatsAppRecipientsPanel } from "@/components/app/whatsapp/recipients-panel";
 import { WhatsAppTestPanel } from "@/components/app/whatsapp/test-panel";
@@ -99,6 +100,7 @@ export default function WhatsAppAdminPage() {
       <Tabs defaultValue="accounts" className="space-y-4">
         <TabsList className="flex h-auto w-full flex-wrap justify-start">
           <TabsTrigger value="accounts">Accounts</TabsTrigger>
+          <TabsTrigger value="incoming">Incoming</TabsTrigger>
           <TabsTrigger value="messages">Message Logs</TabsTrigger>
           <TabsTrigger value="routing">Routing &amp; Templates</TabsTrigger>
           <TabsTrigger value="recipients">Recipients &amp; Groups</TabsTrigger>
@@ -106,6 +108,9 @@ export default function WhatsAppAdminPage() {
         </TabsList>
         <TabsContent value="accounts">
           <WhatsAppAccountsPanel />
+        </TabsContent>
+        <TabsContent value="incoming">
+          <WhatsAppInboxPanel />
         </TabsContent>
         <TabsContent value="messages">
           <WhatsAppMessagesPanel />

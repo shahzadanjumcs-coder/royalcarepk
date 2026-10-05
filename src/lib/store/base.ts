@@ -35,6 +35,7 @@ export type TableName =
   | "whatsapp_bot_settings"
   | "whatsapp_message_queue"
   | "whatsapp_message_logs"
+  | "whatsapp_inbox"
   | "whatsapp_commands";
 
 export interface ListOptions {

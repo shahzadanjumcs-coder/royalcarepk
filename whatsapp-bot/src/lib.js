@@ -95,6 +95,78 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
+/** Digits before '@' with the device suffix stripped ("92300…:12" -> "92300…"). */
+function jidPhone(jid) {
+  return String(jid ?? "").split("@")[0].replace(/:[0-9]+$/, "") || null;
+}
+
+/**
+ * Extract the displayable text of a Baileys message content. Handles the
+ * common wrappers (ephemeral / viewOnce / documentWithCaption) and captioned
+ * media. Non-text media get a readable placeholder so nothing arrives
+ * invisibly. Returns { body, message_type } or null when nothing is showable.
+ */
+function extractInboxBody(message) {
+  const m =
+    message?.ephemeralMessage?.message ??
+    message?.viewOnceMessage?.message ??
+    message?.documentWithCaptionMessage?.message ??
+    message;
+  if (!m) return null;
+  const candidates = [
+    [m.conversation, "conversation"],
+    [m.extendedTextMessage?.text, "extendedText"],
+    [m.imageMessage?.caption, "image"],
+    [m.videoMessage?.caption, "video"],
+    [m.documentMessage?.caption, "document"],
+  ];
+  for (const [text, type] of candidates) {
+    if (typeof text === "string" && text.trim()) return { body: text.trim(), message_type: type };
+  }
+  if (m.imageMessage) return { body: "[image]", message_type: "image" };
+  if (m.videoMessage) return { body: "[video]", message_type: "video" };
+  if (m.audioMessage) return { body: "[voice note]", message_type: "audio" };
+  if (m.stickerMessage) return { body: "[sticker]", message_type: "sticker" };
+  if (m.documentMessage) return { body: `[document ${m.documentMessage.fileName ?? ""}]`.trim(), message_type: "document" };
+  return null; // protocol/reactions/sender-key payloads and other noise
+}
+
+/**
+ * Normalize one Baileys message from `messages.upsert` into a whatsapp_inbox
+ * row — or null when the message must NOT be logged:
+ *   - status broadcasts (contact "about/status" updates, not conversations)
+ *   - our OWN outgoing messages (fromMe echo — Message Logs already covers outbound)
+ *   - protocol/empty payloads with no displayable content
+ * Pure function: no I/O, no Baileys dependency — unit-testable anywhere.
+ */
+function parseIncomingMessage(accountId, m) {
+  const key = m?.key;
+  const remoteJid = key?.remoteJid;
+  if (!key?.id || !remoteJid) return null; // no id -> cannot dedup; no jid -> not a chat
+  if (remoteJid === "status@broadcast") return null;
+  if (key.fromMe) return null;
+  const text = extractInboxBody(m.message);
+  if (!text) return null;
+  const isGroup = remoteJid.endsWith("@g.us");
+  const isBroadcast = remoteJid.endsWith("@broadcast");
+  const senderJid = isGroup ? String(key.participant ?? remoteJid) : remoteJid;
+  return {
+    account_id: accountId ?? null,
+    wa_message_id: String(key.id).slice(0, 255),
+    chat_jid: remoteJid,
+    chat_kind: isGroup ? "group" : isBroadcast ? "broadcast" : "direct",
+    sender_jid: senderJid,
+    sender_phone: jidPhone(senderJid),
+    sender_name: m.pushName ?? null,
+    body: text.body.slice(0, 8000),
+    message_type: text.message_type,
+    is_from_me: false,
+    wa_timestamp: m.messageTimestamp
+      ? new Date(Number(m.messageTimestamp) * 1000).toISOString()
+      : null,
+  };
+}
+
 module.exports = {
   normalizePkWhatsApp,
   toJid,
@@ -104,5 +176,7 @@ module.exports = {
   prefixTestMessage,
   isGroupJid,
   isTransientBaileysError,
+  parseIncomingMessage,
+  jidPhone,
   sleep,
 };

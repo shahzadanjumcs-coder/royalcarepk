@@ -654,6 +654,23 @@ export interface WhatsAppMessageLog {
   created_at: string;
 }
 
+/** Incoming WhatsApp message captured by the local bot (whatsapp_inbox). */
+export interface WhatsAppInboxItem {
+  id: string;
+  account_id: string | null;
+  wa_message_id: string;
+  chat_jid: string;
+  chat_kind: "direct" | "group" | "broadcast";
+  sender_jid: string | null;
+  sender_phone: string | null;
+  sender_name: string | null;
+  body: string | null;
+  message_type: string | null;
+  is_from_me: boolean;
+  wa_timestamp: string | null;
+  created_at: string;
+}
+
 export interface WhatsAppCommand {
   id: string;
   account_id: string | null;

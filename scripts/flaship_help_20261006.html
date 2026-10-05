@@ -1,0 +1,2464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Help &amp; Support | Flaship</title>
+  <meta name="description" content="Find answers, guides, and tutorials for using Flaship — Pakistan's #1 courier aggregator. Browse shipping topics, track orders, manage COD payouts, and more." />
+  <meta name="keywords" content="Flaship help, Flaship support, courier tracking Pakistan help, COD payout guide, shipping tutorial Pakistan, Flaship documentation" />
+  <meta name="robots" content="index, follow" />
+  <meta name="theme-color" content="#080E1A" />
+  <meta name="author" content="Flaship" />
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://flaship.pk/help/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Flaship" />
+  <meta property="og:locale" content="en_PK" />
+  <meta property="og:url" content="https://flaship.pk/help/" />
+  <meta property="og:title" content="Help &amp; Support | Flaship" />
+  <meta property="og:description" content="Find answers, guides, and tutorials for using Flaship — Pakistan's leading courier aggregator. Browse topics or search for instant help." />
+  <meta property="og:image" content="https://flaship.pk/og-banner.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@flashippk" />
+  <meta name="twitter:title" content="Help &amp; Support | Flaship" />
+  <meta name="twitter:description" content="Find answers, guides, and tutorials for using Flaship. Browse topics or search for instant help." />
+  <meta name="twitter:image" content="https://flaship.pk/og-banner.png" />
+
+  <!-- Schema.org JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": "https://flaship.pk/help/#webpage",
+    "url": "https://flaship.pk/help/",
+    "name": "Help & Support | Flaship Documentation",
+    "description": "Find answers, guides, and tutorials for using Flaship — Pakistan's leading courier aggregator.",
+    "isPartOf": { "@id": "https://flaship.pk/#website" },
+    "about": { "@id": "https://flaship.pk/#organization" }
+  }
+  </script>
+
+  <!-- Preconnect -->
+  
+  
+  <link rel="stylesheet" href="../css/design-system.css" />
+  <link rel="stylesheet" href="../css/components.css?v=5.4" />
+  <link rel="icon" type="image/png" href="../Couriers/flaship-logo.png" />
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      if (savedTheme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    })();
+  </script>
+
+  <style>
+    /* ===================================================
+       HELP CENTER — Self-contained styles
+       =================================================== */
+
+    /* Ensure custom cursor only — no system cursor on hover */
+    @media (min-width: 1025px) {
+      .cat-card,
+      .panel-article-item,
+      .art-row-trigger,
+      .faq-trigger,
+      .popular-chip,
+      .step-action,
+      .nl-btn,
+      .cat-panel-close,
+      .sr-item,
+      .art-cta {
+        cursor: none !important;
+      }
+    }
+
+    /* ── HERO ── */
+    .help-hero {
+      position: relative;
+      padding: 180px 0 100px;
+      overflow: hidden;
+      text-align: center;
+    }
+    .help-hero-glow {
+      position: absolute;
+      top: -80px; left: 50%;
+      transform: translateX(-50%);
+      width: 700px; height: 500px;
+      background: radial-gradient(ellipse at center, rgba(50,109,164,0.18) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .help-grid-bg {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(50,109,164,0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(50,109,164,0.055) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 0%, transparent 100%);
+      pointer-events: none;
+    }
+
+    /* ── HERO H1 ── */
+    .help-hero-title {
+      font-family: var(--font-display);
+      font-size: clamp(56px, 9vw, 120px);
+      line-height: 0.92;
+      letter-spacing: 0.01em;
+      margin: 20px auto 28px;
+    }
+    .help-hero-title .line {
+      display: block;
+      overflow: hidden;
+    }
+    .help-hero-title .line-inner {
+      display: block;
+      transform: translateY(108%);
+      will-change: transform;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--violet) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .help-search-wrap, #popular-chips, #status-strip {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    /* ── SEARCH ── */
+    .help-search-wrap {
+      position: relative;
+      max-width: 640px;
+      margin: 0 auto 28px;
+      z-index: 10;
+    }
+    .help-search-input {
+      width: 100%;
+      padding: 18px 56px 18px 52px;
+      border-radius: 14px;
+      border: 1.5px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 16px;
+      outline: none;
+      transition: border-color var(--t-fast), box-shadow var(--t-fast);
+      box-shadow: var(--shadow-card);
+    }
+    .help-search-input::placeholder { color: var(--text-dim); }
+    .help-search-input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 4px rgba(50,109,164,0.15), var(--shadow-hover);
+    }
+    .help-search-icon {
+      position: absolute;
+      left: 18px; top: 50%; transform: translateY(-50%);
+      font-size: 18px; pointer-events: none;
+    }
+    .help-search-shortcut {
+      position: absolute;
+      right: 16px; top: 50%; transform: translateY(-50%);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 3px 7px;
+      border-radius: 5px;
+    }
+    .help-search-results {
+      position: absolute;
+      top: calc(100% + 8px); left: 0; right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow-hover);
+      overflow: hidden;
+      display: none;
+      z-index: 100;
+    }
+    .help-search-results.open { display: block; }
+    .sr-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      cursor: pointer;
+      transition: background var(--t-fast);
+      border-bottom: 1px solid var(--border-card);
+    }
+    .sr-item:last-child { border-bottom: none; }
+    .sr-item:hover, .sr-item.hl { background: rgba(50,109,164,0.09); }
+    .sr-item-icon { font-size: 16px; flex-shrink: 0; }
+    .sr-item-title { flex: 1; font-size: 14px; color: var(--text-primary); }
+    .sr-item-title mark {
+      background: rgba(52,154,226,0.25);
+      color: var(--violet);
+      border-radius: 2px;
+      padding: 0 2px;
+    }
+    .sr-item-cat {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .sr-empty { padding: 16px 18px; color: var(--text-dim); font-size: 14px; }
+
+    /* Popular chips */
+    .popular-chips-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .popular-chip-lbl { font-size: 13px; color: var(--text-dim); }
+    .popular-chip {
+      font-size: 13px;
+      font-family: var(--font-body);
+      color: var(--text-secondary);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+    }
+    .popular-chip:hover {
+      border-color: var(--blue);
+      color: var(--text-primary);
+      background: rgba(50,109,164,0.08);
+    }
+
+    /* Status strip */
+    .status-strip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 3px rgba(0,201,141,0.25);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(0,201,141,0.25); }
+      50% { box-shadow: 0 0 0 6px rgba(0,201,141,0.1); }
+    }
+
+    /* ── CATEGORIES GRID ── */
+    .cat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+    @media (max-width: 960px) { .cat-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .cat-grid { grid-template-columns: 1fr; } }
+
+    .cat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      cursor: pointer;
+      transition: border-color var(--t-med), transform var(--t-med), box-shadow var(--t-med), background var(--t-med);
+      position: relative;
+      overflow: hidden;
+    }
+    .cat-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--gradient-brand);
+      opacity: 0;
+      transition: opacity var(--t-med);
+      z-index: 0;
+    }
+    .cat-card:hover::before { opacity: 0.04; }
+    .cat-card:hover {
+      border-color: var(--blue);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-hover);
+    }
+    .cat-card.open {
+      border-color: var(--blue);
+      background: rgba(50,109,164,0.06);
+    }
+    .cat-card > * { position: relative; z-index: 1; }
+
+    .cat-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .cat-icon {
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      background: var(--gradient-brand);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cat-icon svg {
+      width: 20px; height: 20px;
+      fill: none;
+      stroke: #fff;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .cat-count {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 12px;
+    }
+    .cat-title {
+      font-family: var(--font-heading);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+    .cat-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 14px;
+    }
+    .cat-link {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--blue);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: gap var(--t-fast);
+    }
+    .cat-card:hover .cat-link { gap: 8px; }
+
+    /* ── INLINE CATEGORY PANEL ── */
+    .cat-panel-row {
+      grid-column: 1 / -1;
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.45s cubic-bezier(0.4,0,0.2,1);
+    }
+    .cat-panel-row.open { max-height: 2000px; }
+    .cat-panel-inner {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 36px;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    .cat-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .cat-panel-title {
+      font-family: var(--font-heading);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .cat-panel-close {
+      width: 32px; height: 32px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      color: var(--text-secondary);
+      transition: background var(--t-fast), color var(--t-fast);
+    }
+    .cat-panel-close:hover { background: rgba(50,109,164,0.1); color: var(--text-primary); }
+
+    /* Articles inside panel */
+    .panel-articles-list { display: flex; flex-direction: column; gap: 4px; }
+    .panel-article-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background var(--t-fast), border-color var(--t-fast);
+    }
+    .panel-article-item:hover {
+      background: rgba(50,109,164,0.07);
+      border-color: rgba(50,109,164,0.15);
+    }
+    .panel-article-item.open {
+      background: rgba(50,109,164,0.08);
+      border-color: var(--blue);
+    }
+    .pan-art-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      width: 24px; flex-shrink: 0;
+    }
+    .pan-art-text { flex: 1; font-size: 14px; color: var(--text-primary); font-weight: 500; }
+    .pan-art-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(50,109,164,0.12);
+      color: var(--blue);
+      font-family: var(--font-mono);
+      flex-shrink: 0;
+    }
+    .pan-art-arr {
+      font-size: 14px;
+      color: var(--text-dim);
+      transition: transform var(--t-fast), color var(--t-fast);
+    }
+    .panel-article-item.open .pan-art-arr { transform: rotate(90deg); color: var(--blue); }
+
+    /* Article content expansion */
+    .pan-art-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1);
+    }
+    .pan-art-content.open { max-height: 6000px; }
+    .pan-art-content-inner code,
+    .art-row-content-inner code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: var(--bg-card);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--violet);
+    }
+    .pan-art-content-inner .api-pre,
+    .art-row-content-inner .api-pre {
+      background: linear-gradient(135deg, #121820 0%, #1a2330 100%);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      margin: 8px 0 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.65;
+      color: #c8d4e8;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .pan-art-content-inner {
+      padding: 16px 16px 16px 52px;
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--text-secondary);
+    }
+    .pan-art-content-inner h4 {
+      font-family: var(--font-heading);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 18px 0 8px;
+    }
+    .pan-art-content-inner h4:first-child { margin-top: 0; }
+    .pan-art-content-inner ol, .pan-art-content-inner ul {
+      padding-left: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pan-art-content-inner li { color: var(--text-secondary); }
+    .pan-art-content-inner .tip-box {
+      background: rgba(50,109,164,0.08);
+      border-left: 3px solid var(--blue);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin-top: 12px;
+      font-size: 13px;
+    }
+    .pan-art-content-inner .tip-box strong { color: var(--text-primary); }
+    .pan-art-content-inner .art-cta {
+      margin-top: 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--gradient-brand);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity var(--t-fast), transform var(--t-fast);
+    }
+    .pan-art-content-inner .art-cta:hover { opacity: 0.88; transform: translateY(-1px); }
+
+    /* ── ARTICLE ROWS (popular / new) ── */
+    .articles-two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+    }
+    @media (max-width: 860px) { .articles-two-col { grid-template-columns: 1fr; } }
+
+    .art-col-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 8px;
+      display: block;
+    }
+    .art-col-heading {
+      font-family: var(--font-display);
+      font-size: clamp(24px, 3vw, 36px);
+      color: var(--text-primary);
+      margin-bottom: 24px;
+    }
+
+    .art-row {
+      border-bottom: 1px solid var(--border-card);
+    }
+    .art-row-trigger {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 12px;
+      cursor: pointer;
+      transition: background var(--t-fast);
+      border-radius: 8px;
+    }
+    .art-row-trigger:hover { background: rgba(50,109,164,0.05); }
+    .art-row.open .art-row-trigger { background: rgba(50,109,164,0.07); }
+
+    .art-row-num {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      width: 28px;
+      flex-shrink: 0;
+    }
+    .art-row-mid { flex: 1; }
+    .art-row-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.4;
+      display: block;
+    }
+    .art-row-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      padding: 2px 7px;
+      border-radius: 8px;
+      margin-top: 4px;
+    }
+    .art-row-badge.blue { background: rgba(50,109,164,0.15); color: var(--blue); }
+    .art-row-badge.violet { background: rgba(52,154,226,0.15); color: var(--violet); }
+    .art-row-badge.green { background: rgba(0,201,141,0.12); color: var(--success); }
+    .art-row-time { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+    .art-row-arr {
+      font-size: 14px;
+      color: var(--text-dim);
+      transition: transform var(--t-fast), color var(--t-fast);
+      flex-shrink: 0;
+    }
+    .art-row.open .art-row-arr { transform: rotate(90deg); color: var(--blue); }
+
+    .art-row-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1);
+    }
+    .art-row-content.open { max-height: 6000px; }
+    .art-row-content-inner {
+      padding: 12px 12px 20px 54px;
+      font-size: 13.5px;
+      line-height: 1.75;
+      color: var(--text-secondary);
+    }
+    .art-row-content-inner h4 {
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 14px 0 6px;
+    }
+    .art-row-content-inner h4:first-child { margin-top: 0; }
+    .art-row-content-inner ol, .art-row-content-inner ul {
+      padding-left: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .art-row-content-inner .tip-box {
+      background: rgba(50,109,164,0.07);
+      border-left: 3px solid var(--blue);
+      padding: 10px 14px;
+      border-radius: 0 8px 8px 0;
+      margin-top: 10px;
+      font-size: 12.5px;
+    }
+    .art-row-content-inner .tip-box strong { color: var(--text-primary); }
+    .art-row-content-inner .art-cta {
+      margin-top: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--gradient-brand);
+      color: #fff;
+      padding: 9px 18px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity var(--t-fast), transform var(--t-fast);
+    }
+    .art-row-content-inner .art-cta:hover { opacity: 0.88; transform: translateY(-1px); }
+
+    /* ── FAQ ACCORDION ── */
+    .faq-two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 860px) { .faq-two-col { grid-template-columns: 1fr; } }
+    .faq-col { display: flex; flex-direction: column; gap: 8px; }
+
+    .faq-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color var(--t-fast), background var(--t-fast);
+    }
+    .faq-item.open {
+      border-color: rgba(50,109,164,0.3);
+      background: rgba(50,109,164,0.04);
+    }
+    .faq-trigger {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 20px 22px;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      transition: color var(--t-fast);
+    }
+    .faq-item.open .faq-trigger { color: var(--violet); }
+    .faq-icon {
+      width: 28px; height: 28px;
+      background: var(--bg-darkest);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+      transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+    }
+    .faq-item.open .faq-icon {
+      background: rgba(50,109,164,0.2);
+      color: var(--blue);
+      transform: rotate(45deg);
+    }
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1);
+    }
+    .faq-answer.open { max-height: 600px; }
+    .faq-answer-body {
+      padding: 0 22px 20px;
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--text-secondary);
+      border-left: 3px solid var(--blue);
+      margin: 0 22px 0 22px;
+      padding-left: 16px;
+    }
+
+    /* ── PLATFORM STEPS (replaces video section) ── */
+    .steps-section { padding: 100px 0; }
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 48px;
+    }
+    @media (max-width: 860px) { .steps-grid { grid-template-columns: 1fr; } }
+
+    .step-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color var(--t-med), transform var(--t-med), box-shadow var(--t-med);
+    }
+    .step-card:hover {
+      border-color: var(--blue);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-hover);
+    }
+    .step-num {
+      font-family: var(--font-display);
+      font-size: 72px;
+      line-height: 1;
+      color: var(--blue);
+      opacity: 0.12;
+      position: absolute;
+      top: 16px; right: 20px;
+    }
+    .step-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--blue);
+      background: rgba(50,109,164,0.1);
+      border: 1px solid rgba(50,109,164,0.2);
+      padding: 3px 10px;
+      border-radius: 20px;
+      display: inline-block;
+      margin-bottom: 14px;
+    }
+    .step-title {
+      font-family: var(--font-heading);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+    .step-desc {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+    .step-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--blue);
+      transition: gap var(--t-fast);
+    }
+    .step-card:hover .step-action { gap: 10px; }
+
+    /* Coming soon ribbon */
+    .cs-ribbon {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, rgba(52,154,226,0.15), rgba(50,109,164,0.08));
+      border: 1px solid rgba(52,154,226,0.3);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--violet);
+      margin-bottom: 12px;
+    }
+    .cs-ribbon-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--violet);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    /* ── SUPPORT CARDS ── */
+    .support-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    @media (max-width: 860px) { .support-grid { grid-template-columns: 1fr; } }
+
+    .supp-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius);
+      padding: 36px 32px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      transition: border-color var(--t-med), transform var(--t-med), box-shadow var(--t-med);
+    }
+    .supp-card:hover {
+      border-color: var(--blue);
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-hover);
+    }
+    .supp-card.featured {
+      background: linear-gradient(145deg, rgba(50,109,164,0.08), rgba(52,154,226,0.04));
+      border-color: rgba(50,109,164,0.35);
+    }
+    .supp-icon {
+      width: 60px; height: 60px;
+      border-radius: 16px;
+      background: var(--gradient-brand);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 8px 24px rgba(50,109,164,0.3);
+    }
+    .supp-title {
+      font-family: var(--font-heading);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .supp-desc {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+    .supp-detail {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--blue);
+      font-weight: 600;
+    }
+    .supp-avail {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* ── NEWSLETTER STRIP ── */
+    .nl-strip {
+      background: linear-gradient(135deg, rgba(50,109,164,0.1), rgba(52,154,226,0.06));
+      border-top: 1px solid rgba(50,109,164,0.15);
+      border-bottom: 1px solid rgba(50,109,164,0.15);
+      padding: 80px 0;
+      text-align: center;
+    }
+    .nl-form {
+      display: flex;
+      gap: 12px;
+      max-width: 520px;
+      margin: 28px auto 12px;
+    }
+    .nl-input {
+      flex: 1;
+      padding: 14px 18px;
+      background: var(--bg-secondary);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 14px;
+      outline: none;
+      transition: border-color var(--t-fast);
+    }
+    .nl-input:focus { border-color: var(--blue); }
+    .nl-input::placeholder { color: var(--text-dim); }
+    .nl-btn {
+      padding: 14px 24px;
+      background: var(--gradient-brand);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity var(--t-fast), transform var(--t-fast);
+      white-space: nowrap;
+    }
+    .nl-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .nl-btn.done { background: linear-gradient(135deg, var(--success), #00a86b); }
+    .nl-note { font-size: 12px; color: var(--text-dim); }
+  </style>
+  <script>
+    if (sessionStorage.getItem('flaship_splash_done')) {
+      document.documentElement.classList.add('splash-done');
+    }
+  </script>
+</head>
+<body>
+
+<!-- Splash Screen -->
+<div class="loading-screen" id="loading-screen" aria-hidden="true">
+  <div class="splash-card">
+    <div class="splash-logo-wrap">
+      <img src="../Couriers/flaship-logo.png" class="splash-logo-img" alt="Flaship Logo">
+      <div class="splash-wordmark">FLASH<span>IP</span></div>
+    </div>
+    <div class="splash-tagline">Pakistan's Courier Platform</div>
+    <div class="splash-bar-wrap">
+      <div class="splash-bar-track"><div class="splash-bar-fill"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Cursor -->
+<div class="cursor-dot" id="cursor-dot" aria-hidden="true"></div>
+<div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>
+
+<!-- Page Transition Curtain -->
+<div class="page-transition-curtain" id="page-curtain" aria-hidden="true"></div>
+
+<!-- Scroll Progress -->
+<div id="scroll-progress" aria-hidden="true"></div>
+
+<!-- ═══════════════════════════════════
+     NAVIGATION
+     ═══════════════════════════════════ -->
+<nav class="navbar" id="navbar" aria-label="Main navigation">
+  <div class="nav-inner">
+    <a href="../" class="nav-logo" aria-label="Flaship — Home">
+      <img src="../Couriers/flaship-logo.png" class="nav-logo-img" alt="Flaship Logo">
+      <span class="nav-logo-wordmark">FLASHIP</span>
+    </a>
+
+    <ul class="nav-links" role="list">
+      <li><a href="../">Home</a></li>
+      <li><a href="../about/">About Us</a></li>
+      <li><a href="./" class="active">Support Hub</a></li>
+      <li><a href="../tracking/">Tracking</a></li>
+      <li><a href="../contact/">Contact</a></li>
+    </ul>
+
+    <div class="nav-actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark theme">
+        <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
+      <a href="https://partners.flaship.pk" class="nav-login">Login</a>
+      <a href="https://partners.flaship.pk/register" class="btn btn-primary nav-cta magnetic-btn" id="nav-cta">
+        Sign Up Now
+        <svg class="btn-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+
+    <button class="hamburger" id="hamburger" aria-label="Toggle mobile menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Overlay -->
+<div class="mobile-overlay" id="mobile-overlay" role="dialog" aria-label="Mobile navigation" aria-hidden="true">
+  <a href="../">Home</a>
+  <a href="../about/">About Us</a>
+  <a href="./">Support Hub</a>
+  <a href="../tracking/">Tracking</a>
+  <a href="../contact/">Contact</a>
+</div>
+
+<main>
+
+  <!-- ═══════════════════════════════════
+       HERO & SEARCH
+       ═══════════════════════════════════ -->
+  <section class="help-hero" aria-label="Help center search">
+    <canvas id="hero-canvas" style="position:absolute;inset:0;z-index:0;" aria-hidden="true"></canvas>
+    <div class="help-grid-bg" aria-hidden="true"></div>
+    <div class="help-hero-glow" aria-hidden="true"></div>
+
+    <div class="container" style="position:relative;z-index:2;">
+
+      <div class="hero-tag" id="help-hero-tag" style="display:inline-flex;margin-bottom:16px;">
+        <svg width="13" height="13" viewBox="0 0 40 40" fill="url(#bolt-grad-h)" aria-hidden="true">
+          <defs><linearGradient id="bolt-grad-h" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#326DA4"/><stop offset="100%" stop-color="#349AE2"/></linearGradient></defs>
+          <polygon points="22,2 8,22 18,22 18,38 32,18 22,18"/>
+        </svg>
+        <span>Support Hub</span>
+      </div>
+
+      <h1 class="help-hero-title" id="help-hero-title" aria-label="How can we help you?">
+        <span class="line"><span class="line-inner">HOW CAN WE</span></span>
+        <span class="line"><span class="line-inner">HELP YOU?</span></span>
+      </h1>
+
+      <p class="hero-sub" id="help-hero-sub" style="margin:0 auto 32px;max-width:520px;">
+        Search our knowledge base or browse topics below to find answers fast.
+      </p>
+
+      <!-- Search -->
+      <div class="help-search-wrap" id="help-search-wrap">
+        <span class="help-search-icon" aria-hidden="true">🔍</span>
+        <input
+          type="text"
+          class="help-search-input"
+          id="help-search-input"
+          placeholder="Search for shipping, COD, tracking, returns…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Search articles"
+        />
+        <span class="help-search-shortcut" id="help-search-shortcut">⌘K</span>
+        <div class="help-search-results" id="help-search-results" role="listbox" aria-label="Search results"></div>
+      </div>
+
+      <!-- Popular chips -->
+      <div class="popular-chips-row" id="popular-chips">
+        <span class="popular-chip-lbl">Popular:</span>
+        <button class="popular-chip" data-q="book a shipment">How to book a shipment</button>
+        <button class="popular-chip" data-q="COD withdrawal">COD withdrawal</button>
+        <button class="popular-chip" data-q="download label">Download shipping label</button>
+        <button class="popular-chip" data-q="Shopify">Shopify integration</button>
+        <button class="popular-chip" data-q="API">REST API guide</button>
+      </div>
+
+      <!-- Status strip -->
+      <div class="status-strip" id="status-strip">
+        <span class="status-dot" aria-hidden="true"></span>
+        All Systems Operational — Faisalabad Head Office
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════
+       BROWSE BY TOPIC (inline panels)
+       ═══════════════════════════════════ -->
+  <section class="features-section" id="topics" aria-label="Browse by topic" style="padding:80px 0;">
+    <div class="container">
+      <div style="text-align:center;margin-bottom:48px;">
+        <span class="section-label">Browse by Topic</span>
+        <h2 class="section-h2" style="font-size:clamp(32px,4vw,56px);margin-bottom:0;">FIND HELPFUL ARTICLES BY TOPIC</h2>
+      </div>
+
+      <div class="cat-grid" id="cat-grid">
+
+        <!-- Card 1: Getting Started -->
+        <div class="cat-card" id="cat-getting-started" data-slug="getting-started" role="button" tabindex="0" aria-expanded="false">
+          <div class="cat-card-top">
+            <span class="cat-icon"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9v8l10-12h-9z"/></svg></span>
+            <span class="cat-count">8 articles</span>
+          </div>
+          <div class="cat-title">Getting Started</div>
+          <div class="cat-desc">New to Flaship? Learn how to create your account, connect your store, and book your first shipment.</div>
+          <div class="cat-link">View articles <span>→</span></div>
+        </div>
+
+        <!-- Card 2: Booking Shipments -->
+        <div class="cat-card" id="cat-booking" data-slug="booking" role="button" tabindex="0" aria-expanded="false">
+          <div class="cat-card-top">
+            <span class="cat-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></span>
+            <span class="cat-count">14 articles</span>
+          </div>
+          <div class="cat-title">Booking Shipments</div>
+          <div class="cat-desc">Step-by-step guides on booking single and bulk shipments, selecting couriers, and printing labels.</div>
+          <div class="cat-link">View articles <span>→</span></div>
+        </div>
+
+        <!-- Card 3: Tracking -->
+        <div class="cat-card" id="cat-tracking" data-slug="tracking" role="button" tabindex="0" aria-expanded="false">
+          <div class="cat-card-top">
+            <span class="cat-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10zM2 12h20"/></svg></span>
+            <span class="cat-count">10 articles</span>
+          </div>
+          <div class="cat-title">Tracking &amp; Status</div>
+          <div class="cat-desc">Understand shipment statuses, track orders in real-time, and share tracking links with customers.</div>
+          <div class="cat-link">View articles <span>→</span></div>
+        </div>
+
+        <!-- Card 4: Payments -->
+        <div class="cat-card" id="cat-payments" data-slug="payments" role="button" tabindex="0" aria-expanded="false">
+          <div class="cat-card-top">
+            <span class="cat-icon"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span>
+            <span class="cat-count">11 articles</span>
+          </div>
+          <div class="cat-title">Payments &amp; COD</div>
+          <div class="cat-desc">Everything about COD collection, Flaship Wallet, instant withdrawals, and payment cycles.</div>
+          <div class="cat-link">View articles <span>→</span></div>
+        </div>
+
+        <!-- Inline Panel Row (spans full width) -->
+        <div class="cat-panel-row" id="cat-panel-row">
+          <div class="cat-panel-inner" id="cat-panel-inner">
+            <div class="cat-panel-header">
+              <div class="cat-panel-title" id="cat-panel-title">Getting Started</div>
+              <button class="cat-panel-close" id="cat-panel-close" aria-label="Close panel">✕</button>
+            </div>
+            <div class="panel-articles-list" id="panel-articles-list"></div>
+          </div>
+        </div>
+
+        <!-- Card 5: Returns -->
+        <div class="cat-card" id="cat-returns" data-slug="returns" role="button" tabindex="0" aria-expanded="false">
+          <div class="cat-card-top">
+            <span class="cat-icon"><svg viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></span>
+            <span class="cat-count">9 articles</span>
+          </div>
+          <div class="cat-title">Returns Management</div>
+          <div class="cat-desc">How to process returns, update return statuses, and manage reverse logistics efficiently.</div>
+          <div class="cat-link">View articles <span>→</span></div>
+        </div>
+
+        <!-- Card 6: Labels -->
+        <div class="cat-card" id="cat-labels" data-slug="labels" role="button" tabindex="0" aria-expanded="false">
+          <div class="cat-card-top">
+            <span class="cat-icon"><svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
+            <span class="cat-count">7 articles</span>
+          </div>
+          <div class="cat-title">Labels &amp; Documents</div>
+          <div class="cat-desc">Download shipping labels, generate load sheets, bulk print, and customize label formats.</div>
+          <div class="cat-link">View articles <span>→</span></div>
+        </div>
+
+        <!-- Card 7: Integrations -->
+        <div class="cat-card" id="cat-integrations" data-slug="integrations" role="button" tabindex="0" aria-expanded="false">
+          <div class="cat-card-top">
+            <span class="cat-icon"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+            <span class="cat-count">8 articles</span>
+          </div>
+          <div class="cat-title">Integrations &amp; API</div>
+          <div class="cat-desc">Connect Flaship with Shopify, WooCommerce, or build custom integrations using our REST API.</div>
+          <div class="cat-link">View articles <span>→</span></div>
+        </div>
+
+        <!-- Card 8: Account -->
+        <div class="cat-card" id="cat-account" data-slug="account" role="button" tabindex="0" aria-expanded="false">
+          <div class="cat-card-top">
+            <span class="cat-icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+            <span class="cat-count">6 articles</span>
+          </div>
+          <div class="cat-title">Account &amp; Security</div>
+          <div class="cat-desc">Manage your profile, team members, permissions, password reset, and account security settings.</div>
+          <div class="cat-link">View articles <span>→</span></div>
+        </div>
+
+        <!-- Second Inline Panel Row (for bottom row cards) -->
+        <div class="cat-panel-row" id="cat-panel-row-2">
+          <div class="cat-panel-inner" id="cat-panel-inner-2">
+            <div class="cat-panel-header">
+              <div class="cat-panel-title" id="cat-panel-title-2">Returns</div>
+              <button class="cat-panel-close" id="cat-panel-close-2" aria-label="Close panel">✕</button>
+            </div>
+            <div class="panel-articles-list" id="panel-articles-list-2"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════
+       POPULAR ARTICLES + RECENTLY UPDATED
+       ═══════════════════════════════════ -->
+  <section id="popular" aria-label="Popular articles" style="padding:80px 0; background:var(--bg-secondary);">
+    <div class="container">
+      <div class="articles-two-col">
+
+        <!-- Left: Popular -->
+        <div>
+          <span class="art-col-label">Most Read</span>
+          <h2 class="art-col-heading">POPULAR ARTICLES</h2>
+          <div id="popular-list"></div>
+        </div>
+
+        <!-- Right: New -->
+        <div>
+          <span class="art-col-label">Recently Updated</span>
+          <h2 class="art-col-heading">WHAT'S NEW</h2>
+          <div id="new-list"></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════
+       FAQ ACCORDION
+       ═══════════════════════════════════ -->
+  <section id="faq" aria-label="FAQ" style="padding:100px 0;">
+    <div class="container">
+      <div class="section-header" style="text-align:center;margin-bottom:56px;">
+        <span class="section-label">Quick Answers</span>
+        <h2 class="section-h2" style="font-size:clamp(32px,4vw,56px);margin-bottom:8px;">FREQUENTLY ASKED<br>QUESTIONS</h2>
+        <p class="section-sub">Can't find your answer? Search above or reach out directly.</p>
+      </div>
+
+      <div class="faq-two-col" id="faq-grid">
+
+        <!-- Left column -->
+        <div class="faq-col">
+
+          <div class="faq-item" id="fq1">
+            <button class="faq-trigger" onclick="toggleFaq('fq1')" aria-expanded="false">
+              <span>Is Flaship free to use?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq1-ans">
+              <div class="faq-answer-body">
+                Yes — creating a Flaship account is completely free. You only pay for the shipments you book. There are no monthly fees, setup costs, or hidden charges.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq2">
+            <button class="faq-trigger" onclick="toggleFaq('fq2')" aria-expanded="false">
+              <span>Which couriers can I book through Flaship?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq2-ans">
+              <div class="faq-answer-body">
+                You can currently book with Leopards Courier, M&amp;P (TCS), Daewoo Express, Trax, and Daak. We continuously add new courier partners to give you more delivery options across Pakistan.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq3">
+            <button class="faq-trigger" onclick="toggleFaq('fq3')" aria-expanded="false">
+              <span>How do I get my COD payments?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq3-ans">
+              <div class="faq-answer-body">
+                Once a shipment is marked delivered by the courier, your COD amount is credited to your Flaship Wallet. You can withdraw to any Pakistani bank account anytime, 24/7, with no withdrawal fees.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq4">
+            <button class="faq-trigger" onclick="toggleFaq('fq4')" aria-expanded="false">
+              <span>Can I book shipments in bulk?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq4-ans">
+              <div class="faq-answer-body">
+                Yes. You can upload a CSV file with all your order details and book hundreds of shipments at once. Download all labels and load sheets in a single click after bulk booking.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq5">
+            <button class="faq-trigger" onclick="toggleFaq('fq5')" aria-expanded="false">
+              <span>Does Flaship work with Shopify?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq5-ans">
+              <div class="faq-answer-body">
+                Yes. We have an official Shopify app that pulls your orders directly into Flaship. Book, fulfill, and download labels without leaving your Shopify admin.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq5b">
+            <button class="faq-trigger" onclick="toggleFaq('fq5b')" aria-expanded="false">
+              <span>Does Flaship have a REST API for developers?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq5b-ans">
+              <div class="faq-answer-body">
+                Yes. Authenticate with an <code style="font-family:var(--font-mono);font-size:12px;">X-API-KEY</code> header against <code style="font-family:var(--font-mono);font-size:12px;">partners.flaship.pk</code> to book, track, cancel, generate labels, and run bulk CSV bookings. See the full <a href="./integrations/" style="color:var(--blue);">Integrations</a>, or open the live docs with your API key at partners.flaship.pk/dashboard/merchant/integration/api-docs.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq6">
+            <button class="faq-trigger" onclick="toggleFaq('fq6')" aria-expanded="false">
+              <span>What happens if a shipment is lost or damaged?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq6-ans">
+              <div class="faq-answer-body">
+                Contact our support team at <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e5969095958a9791a5838984968d8c95cb958e">[email&#160;protected]</a> or call +92 310 8786369 immediately. We will liaise directly with the courier on your behalf to resolve the issue as quickly as possible.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right column -->
+        <div class="faq-col">
+
+          <div class="faq-item" id="fq7">
+            <button class="faq-trigger" onclick="toggleFaq('fq7')" aria-expanded="false">
+              <span>How do I track a shipment?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq7-ans">
+              <div class="faq-answer-body">
+                Visit <a href="../tracking/" style="color:var(--blue);">flaship.pk/tracking</a> and enter your Flaship tracking ID or the courier's own tracking number. You'll see real-time status updates pulled directly from the courier's system.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq8">
+            <button class="faq-trigger" onclick="toggleFaq('fq8')" aria-expanded="false">
+              <span>Can I add team members to my Flaship account?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq8-ans">
+              <div class="faq-answer-body">
+                Yes. You can invite team members with different roles: full access, booking only, or view-only. Manage all team permissions from your account settings page.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq9">
+            <button class="faq-trigger" onclick="toggleFaq('fq9')" aria-expanded="false">
+              <span>How long does COD withdrawal take?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq9-ans">
+              <div class="faq-answer-body">
+                Withdrawals to Pakistani bank accounts typically process within 1–2 business days. Timing can vary slightly depending on your bank's processing schedule.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq10">
+            <button class="faq-trigger" onclick="toggleFaq('fq10')" aria-expanded="false">
+              <span>What courier should I choose for my shipment?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq10-ans">
+              <div class="faq-answer-body">
+                It depends on your destination, weight, and delivery speed. Flaship shows you available couriers and their rates side by side so you can pick the best option for every order.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq11">
+            <button class="faq-trigger" onclick="toggleFaq('fq11')" aria-expanded="false">
+              <span>Does Flaship have a mobile app?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq11-ans">
+              <div class="faq-answer-body">
+                Yes — the Flaship mobile app is available for Android devices on the Google Play Store. You can manage bookings, track shipments, and request wallet withdrawals anytime from anywhere. (Our iOS application is currently in active development and will be released soon!)
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" id="fq12">
+            <button class="faq-trigger" onclick="toggleFaq('fq12')" aria-expanded="false">
+              <span>How do I contact Flaship support?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-answer" id="fq12-ans">
+              <div class="faq-answer-body">
+                Reach us by email at <a href="/cdn-cgi/l/email-protection#96e5e3e6e6f9e4e2d6f0faf7e5feffe6b8e6fd" style="color:var(--blue);"><span class="__cf_email__" data-cfemail="1e6d6b6e6e716c6a5e78727f6d76776e306e75">[email&#160;protected]</span></a> or by phone at <a href="tel:+923108786369" style="color:var(--blue);">+92 310 8786369</a>. Our support team is available Monday to Saturday, 9 AM – 7 PM PKT.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════
+       HOW FLASHIP WORKS (replaces videos)
+       ═══════════════════════════════════ -->
+  <section class="steps-section" id="how-it-works" aria-label="How Flaship works" style="background:var(--bg-secondary);">
+    <div class="container">
+      <div style="text-align:center;margin-bottom:0;">
+        <div class="cs-ribbon">
+          <span class="cs-ribbon-dot"></span>
+          Platform Guide
+        </div>
+        <span class="section-label">Step-by-Step</span>
+        <h2 class="section-h2" style="font-size:clamp(32px,4vw,56px);margin-bottom:8px;">HOW FLASHIP WORKS</h2>
+        <p class="section-sub">Everything you need to ship, track, and collect — in three simple steps.</p>
+      </div>
+
+      <div class="steps-grid" id="steps-grid">
+
+        <div class="step-card">
+          <div class="step-num">01</div>
+          <div class="step-badge">Step 1</div>
+          <div class="step-title">Create Your Account</div>
+          <div class="step-desc">
+            Sign up free at partners.flaship.pk. Add your store details, CNIC, and bank account for COD withdrawals. Approval is instant for most sellers.
+          </div>
+          <ul style="font-size:13px;color:var(--text-secondary);padding-left:18px;display:flex;flex-direction:column;gap:5px;margin-bottom:20px;">
+            <li>No registration fee</li>
+            <li>Verified within minutes</li>
+            <li>Connect Shopify, WooCommerce, or use our <a href="./integrations/" style="color:var(--blue);">REST API</a></li>
+          </ul>
+          <a href="https://partners.flaship.pk/register" class="step-action">
+            Get started <span>→</span>
+          </a>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">02</div>
+          <div class="step-badge">Step 2</div>
+          <div class="step-title">Book &amp; Ship</div>
+          <div class="step-desc">
+            Enter order details, compare courier rates, and book in seconds. Print your shipping label and hand the parcel to the courier at your doorstep.
+          </div>
+          <ul style="font-size:13px;color:var(--text-secondary);padding-left:18px;display:flex;flex-direction:column;gap:5px;margin-bottom:20px;">
+            <li>Single or bulk CSV booking</li>
+            <li>A6 &amp; thermal label formats</li>
+            <li>Courier pickup from your location</li>
+          </ul>
+          <button class="step-action" onclick="document.getElementById('fq4').scrollIntoView({behavior:'smooth'});setTimeout(()=>toggleFaq('fq4'),400);">
+            Learn about bulk booking <span>→</span>
+          </button>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">03</div>
+          <div class="step-badge">Step 3</div>
+          <div class="step-title">Track &amp; Get Paid</div>
+          <div class="step-desc">
+            Monitor every shipment in real-time from your dashboard. COD is credited to your Flaship Wallet on delivery. Withdraw to any bank account, 24/7.
+          </div>
+          <ul style="font-size:13px;color:var(--text-secondary);padding-left:18px;display:flex;flex-direction:column;gap:5px;margin-bottom:20px;">
+            <li>Live tracking across all couriers</li>
+            <li>Instant wallet credit on delivery</li>
+            <li>No withdrawal fees, ever</li>
+          </ul>
+          <a href="../tracking/" class="step-action">
+            Track a shipment <span>→</span>
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════
+       CONTACT SUPPORT
+       ═══════════════════════════════════ -->
+  <section id="contact-strip" aria-label="Get in touch" style="padding:100px 0;">
+    <div class="container">
+      <div style="text-align:center;margin-bottom:52px;">
+        <span class="section-label">Still Need Help?</span>
+        <h2 class="section-h2" style="font-size:clamp(32px,4vw,56px);margin-bottom:8px;">OUR TEAM IS HERE FOR YOU</h2>
+        <p class="section-sub">Can't find your answer? Our support team responds fast.</p>
+      </div>
+
+      <div class="support-grid" id="support-grid">
+
+        <div class="supp-card">
+          <div class="supp-icon">✉</div>
+          <div class="supp-title">Email Us</div>
+          <div class="supp-desc">For account setups, billing issues, and general support. We respond within a few hours on business days.</div>
+          <div class="supp-detail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="681b1d1818071a1c280e04091b000118461803">[email&#160;protected]</a></div>
+          <a href="/cdn-cgi/l/email-protection#f88b8d8888978a8cb89e94998b909188d68893" class="btn btn-ghost magnetic-btn" style="border-radius:var(--radius-btn);">Send Email</a>
+        </div>
+
+        <div class="supp-card featured">
+          <div class="supp-icon">📞</div>
+          <div class="supp-title">Call Us</div>
+          <div class="supp-desc">Speak directly with our logistics team in Faisalabad for urgent booking issues or account setups.</div>
+          <div class="supp-detail">+92 310 8786369</div>
+          <div class="supp-avail">Mon–Sat, 9 AM – 7 PM PKT</div>
+          <a href="tel:+923108786369" class="btn btn-primary magnetic-btn" style="border-radius:var(--radius-btn);">Call Now</a>
+        </div>
+
+        <div class="supp-card">
+          <div class="supp-icon">📖</div>
+          <div class="supp-title">Seller Dashboard</div>
+          <div class="supp-desc">Log in to your seller dashboard to manage bookings, check wallet balance, download labels, and more.</div>
+          <div class="supp-detail">partners.flaship.pk</div>
+          <a href="https://partners.flaship.pk" class="btn btn-ghost magnetic-btn" style="border-radius:var(--radius-btn);">Open Dashboard →</a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════
+       NEWSLETTER STRIP
+       ═══════════════════════════════════ -->
+  <section class="nl-strip" id="newsletter" aria-label="Subscribe to updates">
+    <div class="container">
+      <span class="section-label">Stay Updated</span>
+      <h2 class="section-h2" style="font-family:var(--font-display);font-size:clamp(40px,6vw,80px);margin-bottom:12px;">GET HELP CENTER UPDATES</h2>
+      <p class="section-sub">We'll notify you when we publish new guides or update our documentation.</p>
+
+      <form class="nl-form" id="nl-form" onsubmit="handleSubscribe(event)" novalidate>
+        <input type="email" class="nl-input" id="nl-email" placeholder="Your email address" required aria-label="Email address" />
+        <button type="submit" class="nl-btn" id="nl-btn">Subscribe →</button>
+      </form>
+      <div class="nl-note">No spam. Unsubscribe anytime.</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════ -->
+  <footer class="footer" id="footer" role="contentinfo">
+    <div class="footer-glow" aria-hidden="true"></div>
+    <div class="container">
+      <div class="footer-grid">
+
+        <div class="footer-brand-col">
+          <div class="footer-brand-logo">
+            <img src="../Couriers/flaship-logo.png" class="footer-logo-img" alt="Flaship Logo">
+            <span class="wordmark">FLASHIP</span>
+          </div>
+          <p class="footer-tagline">Pakistan's leading courier aggregator connecting e-commerce sellers with multiple courier partners from a single dashboard.</p>
+          <div class="footer-socials">
+            <a href="https://www.facebook.com/flashiptechnologies" class="social-btn" aria-label="Flaship on Facebook" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+            </a>
+            <a href="#" class="social-btn" aria-label="Flaship on Twitter">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z M4 20l6.768 -6.768 M20 4l-6.768 6.768"/></svg>
+            </a>
+            <a href="https://www.instagram.com/flashiptechnologies/" class="social-btn" aria-label="Flaship on Instagram" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+            </a>
+            <a href="https://www.linkedin.com/company/flaship-pk/" class="social-btn" aria-label="Flaship on LinkedIn" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+            </a>
+          </div>
+        </div>
+        <div class="footer-col">
+          <h4>Navigation</h4>
+          <ul class="footer-links">
+            <li><a href="../">Home</a></li>
+            <li><a href="../about/">About Us</a></li>
+            <li><a href="../tracking/">Order Tracking</a></li>
+            <li><a href="./">Support Hub</a></li>
+            <li><a href="../contact/">Contact Us</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Corporate Office</h4>
+          <div class="footer-contact-row">
+            <span class="ico" aria-hidden="true">📍</span>
+            <span>P-91 Khayabaan Colony #1, Faisalabad, Pakistan</span>
+          </div>
+          <div class="footer-contact-row">
+            <span class="ico" aria-hidden="true">📞</span>
+            <a href="tel:+923108786369">+92 310 8786369</a>
+          </div>
+          <div class="footer-contact-row">
+            <span class="ico" aria-hidden="true">✉</span>
+            <a href="/cdn-cgi/l/email-protection#b3c0c6c3c3dcc1c7f3d5dfd2c0dbdac39dc3d8"><span class="__cf_email__" data-cfemail="88fbfdf8f8e7fafcc8eee4e9fbe0e1f8a6f8e3">[email&#160;protected]</span></a>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="footer-watermark" aria-hidden="true">FLASHIP</div>
+
+      <div class="footer-bottom">
+        <span class="footer-copy">© 2025 Flaship. All rights reserved.</span>
+        <div class="footer-legal">
+          <a href="../privacy/">Privacy Policy</a>
+          <a href="../terms/">Terms of Service</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</main>
+
+<!-- JS SCRIPTS -->
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/dist/lenis.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="../js/core.js?v=5.4"></script>
+<script src="../js/animations.js?v=5.4"></script>
+
+<script>
+/* ============================================================
+   FLASHIP HELP CENTER — SELF-CONTAINED INTERACTIVE LOGIC
+   ============================================================ */
+
+/* ── ARTICLE CONTENT DATABASE ── */
+const ARTICLES = {
+  'getting-started': [
+    {
+      title: 'How to create your Flaship account',
+      tag: 'Getting Started',
+      content: `
+        <h4>Step-by-step account setup</h4>
+        <ol>
+          <li>Visit <strong>partners.flaship.pk</strong> and click "Sign Up Now".</li>
+          <li>Enter your phone number and verify it with the OTP sent via SMS.</li>
+          <li>Fill in your business name, CNIC number, and store type.</li>
+          <li>Add your bank account details for COD withdrawals.</li>
+          <li>Your account is created — you can start booking immediately.</li>
+        </ol>
+        <div class="tip-box"><strong>Tip:</strong> Have your CNIC and bank account details ready to complete setup in under 3 minutes.</div>
+        <a href="https://partners.flaship.pk/register" class="art-cta">Create Account →</a>
+      `
+    },
+    {
+      title: 'Connecting your store to Flaship',
+      tag: 'Getting Started',
+      content: `
+        <h4>Available store integrations</h4>
+        <ul>
+          <li><strong>Shopify</strong> — Install the Flaship app from the Shopify App Store and authorize it.</li>
+          <li><strong>WooCommerce</strong> — Download the Flaship plugin from your WordPress dashboard.</li>
+          <li><strong>Custom / REST API</strong> — Use our REST API (<a href="./integrations/" style="color:var(--blue);">Integrations</a>) to integrate any custom store or system.</li>
+        </ul>
+        <h4>Manual order import</h4>
+        <p>No integration? You can also upload orders via CSV or enter them manually one at a time through your dashboard.</p>
+        <div class="tip-box"><strong>Tip:</strong> Shopify integration syncs orders automatically. No manual CSV needed for Shopify sellers.</div>
+      `
+    },
+    {
+      title: 'Adding your bank account for COD',
+      tag: 'Getting Started',
+      content: `
+        <h4>How to add your bank account</h4>
+        <ol>
+          <li>Go to <strong>Settings → Wallet & Payments</strong> in your dashboard.</li>
+          <li>Click "Add Bank Account".</li>
+          <li>Enter your IBAN or account number, branch code, and account title.</li>
+          <li>Save. Bank details are verified within 24 hours.</li>
+        </ol>
+        <div class="tip-box"><strong>Note:</strong> You can add multiple bank accounts and choose which one to withdraw to each time.</div>
+      `
+    },
+    {
+      title: 'Understanding the Flaship dashboard',
+      tag: 'Getting Started',
+      content: `
+        <h4>Dashboard sections at a glance</h4>
+        <ul>
+          <li><strong>Bookings</strong> — Create, view, and manage all your shipments.</li>
+          <li><strong>Wallet</strong> — See your COD balance and request withdrawals.</li>
+          <li><strong>Reports</strong> — Download shipment and revenue reports.</li>
+          <li><strong>Settings</strong> — Manage your account, team, and integrations.</li>
+        </ul>
+        <a href="https://partners.flaship.pk" class="art-cta">Open Dashboard →</a>
+      `
+    }
+  ],
+  'booking': [
+    {
+      title: 'How to book your first shipment',
+      tag: 'Booking',
+      content: `
+        <h4>Book a single shipment in 4 steps</h4>
+        <ol>
+          <li>From your dashboard, click <strong>New Booking</strong>.</li>
+          <li>Enter the receiver's name, phone, and full address (city, area, street).</li>
+          <li>Enter parcel weight and declared value (for insurance and COD).</li>
+          <li>Select a courier from the side-by-side comparison and click <strong>Book</strong>.</li>
+        </ol>
+        <h4>Download your label</h4>
+        <p>After booking, your shipping label is ready instantly. Print it on A4 or A6 / thermal paper and stick it on your parcel.</p>
+        <a href="https://partners.flaship.pk" class="art-cta">Book a Shipment →</a>
+      `
+    },
+    {
+      title: 'How to book bulk shipments via CSV',
+      tag: 'Booking',
+      content: `
+        <h4>CSV bulk booking steps</h4>
+        <ol>
+          <li>Download the Flaship CSV template from the <strong>Bulk Booking</strong> tab.</li>
+          <li>Fill in your order data: receiver name, phone, address, weight, COD amount, courier.</li>
+          <li>Upload the CSV file back into Flaship.</li>
+          <li>Review and confirm — all labels and load sheets generate in one click.</li>
+        </ol>
+        <div class="tip-box"><strong>Tip:</strong> You can book up to 500 orders per CSV file. Use separate files for different couriers if needed.</div>
+      `
+    },
+    {
+      title: 'Selecting the right courier',
+      tag: 'Booking',
+      content: `
+        <h4>Courier comparison guide</h4>
+        <ul>
+          <li><strong>Leopards</strong> — Best coverage across all cities and rural areas.</li>
+          <li><strong>M&P (TCS)</strong> — Premium, fast delivery for high-value items.</li>
+          <li><strong>Trax</strong> — Budget-friendly rates for high-volume sellers.</li>
+          <li><strong>Daewoo Express</strong> — Strong inter-city coverage, reliable for same-day in major cities.</li>
+          <li><strong>Daak</strong> — Great for local deliveries within the same city.</li>
+        </ul>
+        <div class="tip-box"><strong>Tip:</strong> Flaship shows real-time rates from all couriers side-by-side. Always compare before booking.</div>
+      `
+    }
+  ],
+  'tracking': [
+    {
+      title: 'How to track a shipment',
+      tag: 'Tracking',
+      content: `
+        <h4>Two ways to track</h4>
+        <ul>
+          <li><strong>From Dashboard:</strong> Go to Bookings, find your order, and click the tracking icon.</li>
+          <li><strong>Public Tracking Page:</strong> Share the link <a href="../tracking/" style="color:var(--blue);">flaship.pk/tracking</a> with your customer — they can enter the Flaship tracking ID or courier tracking number.</li>
+        </ul>
+        <h4>Common status meanings</h4>
+        <ul>
+          <li><strong>Booked</strong> — Label printed, awaiting courier pickup.</li>
+          <li><strong>In Transit</strong> — Parcel picked up and moving to destination.</li>
+          <li><strong>Out for Delivery</strong> — With the delivery rider today.</li>
+          <li><strong>Delivered</strong> — Successfully delivered. COD credited to wallet.</li>
+          <li><strong>Return</strong> — Could not deliver, parcel being returned to you.</li>
+        </ul>
+        <a href="../tracking/" class="art-cta">Track a Shipment →</a>
+      `
+    },
+    {
+      title: 'Understanding shipment status codes',
+      tag: 'Tracking',
+      content: `
+        <h4>Full status code reference</h4>
+        <ul>
+          <li><strong>BOOKED</strong> — Booking confirmed, label generated.</li>
+          <li><strong>PICKED_UP</strong> — Collected by courier rider.</li>
+          <li><strong>IN_TRANSIT</strong> — Parcel at courier facility, moving toward destination city.</li>
+          <li><strong>OUT_FOR_DELIVERY</strong> — With the last-mile delivery rider.</li>
+          <li><strong>DELIVERED</strong> — Delivered successfully.</li>
+          <li><strong>FAILED_DELIVERY</strong> — Delivery attempted but receiver not available.</li>
+          <li><strong>RETURNED_TO_ORIGIN</strong> — Parcel returned to your address.</li>
+          <li><strong>CANCELLED</strong> — Booking cancelled before pickup.</li>
+        </ul>
+      `
+    }
+  ],
+  'payments': [
+    {
+      title: 'How to withdraw COD from Flaship Wallet',
+      tag: 'Payments',
+      content: `
+        <h4>Withdrawal steps</h4>
+        <ol>
+          <li>Go to <strong>Wallet</strong> in your dashboard.</li>
+          <li>Click <strong>Withdraw</strong>.</li>
+          <li>Select your bank account (or add a new one).</li>
+          <li>Enter the amount you wish to withdraw.</li>
+          <li>Confirm. Funds arrive within 1–2 business days.</li>
+        </ol>
+        <div class="tip-box"><strong>Note:</strong> There are no withdrawal fees. You keep 100% of your COD amount.</div>
+      `
+    },
+    {
+      title: 'Understanding the Flaship Wallet',
+      tag: 'Payments',
+      content: `
+        <h4>How your wallet works</h4>
+        <ul>
+          <li>When a shipment is delivered and the courier collects COD, the amount is credited to your Flaship Wallet.</li>
+          <li>You can withdraw your balance to any Pakistani bank at any time, 24/7.</li>
+          <li>Your wallet also shows pending amounts (COD not yet collected by courier).</li>
+        </ul>
+        <h4>Payment cycle</h4>
+        <p>Couriers remit COD to Flaship on their own payment cycle (typically weekly). Flaship credits your wallet as soon as funds are received from the courier.</p>
+      `
+    }
+  ],
+  'returns': [
+    {
+      title: 'How to process a return shipment',
+      tag: 'Returns',
+      content: `
+        <h4>Steps to process a return</h4>
+        <ol>
+          <li>Find the original shipment in your <strong>Bookings</strong> list.</li>
+          <li>Click <strong>Process Return</strong> on the shipment.</li>
+          <li>Confirm the return request — the courier will pick up the parcel from the customer.</li>
+          <li>Track the return just like a regular shipment from your dashboard.</li>
+        </ol>
+        <div class="tip-box"><strong>Note:</strong> Return shipping fees may apply depending on your courier agreement. Check your courier's return policy in Settings.</div>
+      `
+    },
+    {
+      title: 'Return status definitions',
+      tag: 'Returns',
+      content: `
+        <h4>Return status meanings</h4>
+        <ul>
+          <li><strong>RETURN_REQUESTED</strong> — Return initiated by you or courier.</li>
+          <li><strong>RETURN_IN_TRANSIT</strong> — Parcel moving back to your location.</li>
+          <li><strong>RETURN_DELIVERED</strong> — Parcel successfully returned to your address.</li>
+          <li><strong>RETURN_FAILED</strong> — Could not complete return (e.g. address issue). Contact support.</li>
+        </ul>
+      `
+    }
+  ],
+  'labels': [
+    {
+      title: 'How to download a shipping label',
+      tag: 'Labels',
+      content: `
+        <h4>Download options after booking</h4>
+        <ol>
+          <li>After booking, click <strong>Download Label</strong> from the booking confirmation page.</li>
+          <li>Or go to <strong>Bookings</strong>, find your order, and click the label icon.</li>
+          <li>Choose your format: A4, A6, or Thermal.</li>
+          <li>Print and stick on your parcel before handing to the courier.</li>
+        </ol>
+        <div class="tip-box"><strong>Tip:</strong> For bulk orders, select multiple bookings and download all labels as a single ZIP file.</div>
+      `
+    },
+    {
+      title: 'A6 and thermal printer label options',
+      tag: 'Labels',
+      content: `
+        <h4>Supported label formats</h4>
+        <ul>
+          <li><strong>A4 (standard)</strong> — Print on any regular printer. 2 labels per page.</li>
+          <li><strong>A6 (half-page)</strong> — Smaller, sticker-compatible. Ideal for packaging.</li>
+          <li><strong>Thermal / ZPL</strong> — For Zebra and similar thermal label printers. Direct print, no ink needed.</li>
+        </ul>
+        <p>Change your default label format in <strong>Settings → Label Preferences</strong>.</p>
+      `
+    },
+    {
+      title: 'Generating load sheets for courier pickup',
+      tag: 'Labels',
+      content: `
+        <h4>What is a load sheet?</h4>
+        <p>A load sheet is a manifest document listing all parcels in a batch. The courier rider signs it when picking up your orders.</p>
+        <h4>How to generate a load sheet</h4>
+        <ol>
+          <li>Go to <strong>Bookings → Bulk Actions</strong>.</li>
+          <li>Select the bookings for the batch (filter by courier and date).</li>
+          <li>Click <strong>Generate Load Sheet</strong>.</li>
+          <li>Print and keep a copy for your records. Hand the original to the courier rider.</li>
+        </ol>
+      `
+    }
+  ],
+  'integrations': [
+    {
+      title: 'Flaship REST API — Integrations',
+      tag: 'API',
+      content: `
+        <h4>Overview</h4>
+        <p>Flaship exposes a merchant REST API for custom store and ERP integrations. All requests use JSON (except bulk CSV upload) and authenticate with your API key.</p>
+        <ul>
+          <li>Base host: <code>https://partners.flaship.pk</code></li>
+          <li>Auth header: <code>X-API-KEY: your_api_key</code></li>
+          <li>Get your key from the seller dashboard <strong>Integrations</strong> page (API access required).</li>
+        </ul>
+        <h4>Recommended flow</h4>
+        <ol>
+          <li><code>GET /api/integration/catalog/</code> — pickup locations, couriers, rates, cities</li>
+          <li><code>POST /api/integration/bookings/</code> — create a shipment</li>
+          <li><code>GET /api/integration/orders/{cn}/tracking/</code> — track by CN</li>
+          <li><code>POST /api/integration/labels/</code> — download labels</li>
+        </ol>
+        <div class="tip-box"><strong>Full reference:</strong> Endpoints, parameters, and sample payloads are documented on the public Integrations guide.</div>
+        <a href="./integrations/" class="art-cta">Open Integrations →</a>
+      `
+    },
+    {
+      title: 'Authentication &amp; API key',
+      tag: 'API',
+      content: `
+        <h4>How authentication works</h4>
+        <ol>
+          <li>Log in at <strong>partners.flaship.pk</strong>.</li>
+          <li>Open <strong>Integrations</strong> in the merchant menu (requires API key access).</li>
+          <li>Copy your API key from the top of the page.</li>
+          <li>Send it on every request as the <code>X-API-KEY</code> header.</li>
+        </ol>
+        <div class="api-pre">X-API-KEY: your_api_key
+Content-Type: application/json</div>
+        <div class="tip-box"><strong>Security:</strong> Never expose your API key in frontend JavaScript or public repos. Use it only from your server or trusted plugins.</div>
+        <a href="https://partners.flaship.pk/dashboard/merchant/integration/api-docs" class="art-cta" target="_blank" rel="noopener">Get API key in dashboard →</a>
+      `
+    },
+    {
+      title: 'Create booking via API',
+      tag: 'API',
+      content: `
+        <h4>Endpoint</h4>
+        <div class="api-pre">POST https://partners.flaship.pk/api/integration/bookings/</div>
+        <h4>Required fields</h4>
+        <ul>
+          <li><code>consigneeName</code>, <code>consigneePhone1</code>, <code>consigneeAddress</code>, <code>destinationCity</code></li>
+          <li><code>codAmount</code>, <code>productName</code>, <code>productWeight</code>, <code>productPieces</code></li>
+          <li><code>courierCompany</code> (e.g. Leopard, TCS, MNP), <code>courierOption</code> (overnight / overland / detain)</li>
+          <li><code>pickuplocation</code> — pickup location ID from company list</li>
+        </ul>
+        <h4>Sample success response</h4>
+        <div class="api-pre">{
+  "success": true,
+  "orderNo": 12345,
+  "trackingId": "FLP123456789"
+}</div>
+        <a href="./integrations/#create-booking" class="art-cta">Full Create Booking docs →</a>
+      `
+    },
+    {
+      title: 'Track, list &amp; cancel orders via API',
+      tag: 'API',
+      content: `
+        <h4>Track order</h4>
+        <div class="api-pre">GET https://partners.flaship.pk/api/integration/orders/FLP123456789/tracking/</div>
+        <p>Use the tracking number (CN), not the internal order ID.</p>
+        <h4>List / filter orders</h4>
+        <div class="api-pre">GET https://partners.flaship.pk/api/integration/orders/?status=Booked&amp;company=Leopard&amp;page=1</div>
+        <p>Also supports <code>startDate</code>, <code>endDate</code>, <code>search</code>, and <code>type=download</code> for export.</p>
+        <h4>Cancel order</h4>
+        <div class="api-pre">POST https://partners.flaship.pk/api/integration/orders/{tracking_number}/cancel/
+{ "cn": "FLP123456789" }</div>
+        <a href="./integrations/#track-order" class="art-cta">Order management docs →</a>
+      `
+    },
+    {
+      title: 'Bulk booking, labels &amp; loadsheets API',
+      tag: 'API',
+      content: `
+        <h4>Bulk CSV booking</h4>
+        <div class="api-pre">POST https://partners.flaship.pk/api/integration/bookings/bulk/
+multipart: courierCompany, pickuplocation, file</div>
+        <p>Row limits: 500 for Leopard/Trax/MNP/Tranzo · 50 for TCS/Daak/Daewoo/Alfa · 200 for Dastaq.</p>
+        <h4>Labels</h4>
+        <div class="api-pre">POST https://partners.flaship.pk/api/integration/labels/
+{ "cns": ["FLP123456789"] }  or  { "loadsheet_id": 5234 }</div>
+        <h4>Loadsheets</h4>
+        <ol>
+          <li><code>GET /api/integration/loadsheets/eligible/</code> — booked orders without a loadsheet</li>
+          <li><code>POST /api/integration/loadsheets/</code> with <code>cns</code> array — returns PDF URL + loadsheet ID</li>
+        </ol>
+        <a href="./integrations/#bulk-booking" class="art-cta">Bulk &amp; documents docs →</a>
+      `
+    },
+    {
+      title: 'Connecting Flaship with Shopify',
+      tag: 'Integrations',
+      content: `
+        <h4>Installation steps</h4>
+        <ol>
+          <li>In your Shopify admin, go to <strong>Apps → Flaship</strong>.</li>
+          <li>Click Install and authorize Flaship to access your store.</li>
+          <li>In Flaship dashboard, go to <strong>Settings → Integrations → Shopify</strong> and link your store URL.</li>
+          <li>Orders from Shopify will now appear in your Flaship Bookings tab automatically.</li>
+        </ol>
+        <div class="tip-box"><strong>Tip:</strong> Enable auto-fulfillment so Shopify is marked fulfilled as soon as you book the shipment in Flaship.</div>
+      `
+    },
+    {
+      title: 'WooCommerce plugin — Flaship Booking Official',
+      tag: 'Integrations',
+      content: `
+        <h4>Plugin setup (v1.1.0)</h4>
+        <ol>
+          <li>Download <code>flaship-booking.zip</code> from your Flaship <strong>Integrations</strong> (WooCommerce tab).</li>
+          <li>In WordPress: <strong>Plugins → Add New → Upload Plugin</strong>, install and activate.</li>
+          <li>Open <strong>Flaship Settings</strong>, paste your API key (stored encrypted with AES-256), and save.</li>
+          <li>In <strong>WooCommerce → Orders</strong>, select orders → bulk action <strong>Book with Flaship</strong>.</li>
+        </ol>
+        <h4>What the plugin uses</h4>
+        <ul>
+          <li><code>GET /api/integration/catalog/</code> — couriers, cities, pickups</li>
+          <li><code>POST /api/integration/bookings/</code> — create bookings</li>
+          <li><code>GET /api/integration/orders/&lt;cn&gt;/tracking/</code> — scheduled tracking sync</li>
+        </ul>
+        <div class="tip-box"><strong>Meta keys:</strong> <code>_flaship_tracking_id</code>, <code>_flaship_courier_name</code>, <code>_flaship_order_no</code>, <code>_flaship_tracking_snapshot</code></div>
+        <a href="./integrations/#woocommerce-plugin" class="art-cta">WooCommerce setup guide →</a>
+      `
+    },
+    {
+      title: 'Pickup locations &amp; rate cards via API',
+      tag: 'API',
+      content: `
+        <h4>Couriers, rates &amp; cities</h4>
+        <div class="api-pre">GET https://partners.flaship.pk/api/integration/catalog/</div>
+        <p>Returns <code>pickupAddress</code>, <code>companies</code>, <code>rateCards</code>, and operational cities. Call this before booking.</p>
+        <h4>Pickup locations</h4>
+        <ul>
+          <li><code>GET /api/integration/pickups/</code> — list locations</li>
+          <li><code>POST /api/integration/pickups/</code> — create with address, city, shipper phone &amp; name</li>
+        </ul>
+        <h4>Rate card &amp; statuses</h4>
+        <ul>
+          <li><code>GET /api/integration/rate-cards/</code> — charges per courier/service</li>
+          <li><code>GET /api/integration/statuses/</code> — order status values and service types</li>
+        </ul>
+        <a href="./integrations/#integration-config" class="art-cta">Reference data docs →</a>
+      `
+    }
+  ],
+  'account': [
+    {
+      title: 'How to add team members to your account',
+      tag: 'Account',
+      content: `
+        <h4>Invite a team member</h4>
+        <ol>
+          <li>Go to <strong>Settings → Team Members</strong>.</li>
+          <li>Click <strong>Invite Member</strong>.</li>
+          <li>Enter their email address and choose their role: Admin, Booking Only, or View Only.</li>
+          <li>They will receive an email invitation to join your Flaship account.</li>
+        </ol>
+        <div class="tip-box"><strong>Note:</strong> Admin members have full access including wallet and settings. Booking-only members can only create and manage shipments.</div>
+      `
+    },
+    {
+      title: 'Resetting your password',
+      tag: 'Account',
+      content: `
+        <h4>Password reset steps</h4>
+        <ol>
+          <li>Go to <a href="https://partners.flaship.pk" style="color:var(--blue);">partners.flaship.pk</a> and click <strong>Forgot Password</strong>.</li>
+          <li>Enter your registered phone number.</li>
+          <li>Enter the OTP received via SMS.</li>
+          <li>Set your new password.</li>
+        </ol>
+        <p>If you cannot access your registered phone number, contact support at support@flaship.pk.</p>
+      `
+    },
+    {
+      title: 'Managing account security',
+      tag: 'Account',
+      content: `
+        <h4>Security best practices</h4>
+        <ul>
+          <li>Use a strong, unique password for your Flaship account.</li>
+          <li>Never share your login credentials with anyone outside your business.</li>
+          <li>Use role-based team access instead of sharing your admin login.</li>
+          <li>Review your active sessions in <strong>Settings → Security</strong> and log out of unknown sessions.</li>
+        </ul>
+        <div class="tip-box"><strong>Suspicious activity?</strong> Contact us immediately at +92 310 8786369.</div>
+      `
+    }
+  ]
+};
+
+/* popular articles data */
+const POPULAR_ARTICLES = [
+  { num: '01', title: 'How to create your Flaship account', tag: 'Getting Started', tagClass: 'blue', slug: 'getting-started', artIdx: 0 },
+  { num: '02', title: 'How to book your first shipment', tag: 'Booking', tagClass: 'blue', slug: 'booking', artIdx: 0 },
+  { num: '03', title: 'How to download a shipping label', tag: 'Labels', tagClass: 'blue', slug: 'labels', artIdx: 0 },
+  { num: '04', title: 'How to withdraw COD from Flaship Wallet', tag: 'Payments', tagClass: 'violet', slug: 'payments', artIdx: 0 },
+  { num: '05', title: 'Understanding shipment status codes', tag: 'Tracking', tagClass: 'blue', slug: 'tracking', artIdx: 1 },
+  { num: '06', title: 'How to book bulk shipments via CSV', tag: 'Booking', tagClass: 'blue', slug: 'booking', artIdx: 1 },
+  { num: '07', title: 'How to process a return shipment', tag: 'Returns', tagClass: 'blue', slug: 'returns', artIdx: 0 },
+  { num: '08', title: 'Flaship REST API — Integrations', tag: 'API', tagClass: 'violet', slug: 'integrations', artIdx: 0 }
+];
+
+const NEW_ARTICLES = [
+  { num: '01', title: 'Flaship REST API — Integrations', tag: 'API', tagClass: 'violet', time: 'Just now', slug: 'integrations', artIdx: 0 },
+  { num: '02', title: 'WooCommerce plugin — Flaship Booking Official', tag: 'Integrations', tagClass: 'violet', time: 'Just now', slug: 'integrations', artIdx: 6 },
+  { num: '03', title: 'Create booking via API', tag: 'API', tagClass: 'violet', time: 'Just now', slug: 'integrations', artIdx: 2 },
+  { num: '04', title: 'M&P — new weight slabs (2025)', tag: 'Booking', tagClass: 'blue', time: '2 days ago', slug: 'booking', artIdx: 2 },
+  { num: '05', title: 'Flaship Wallet — new bank options', tag: 'Payments', tagClass: 'violet', time: '4 days ago', slug: 'payments', artIdx: 1 },
+  { num: '06', title: 'Bulk CSV format — updated column guide', tag: 'Booking', tagClass: 'blue', time: '6 days ago', slug: 'booking', artIdx: 1 },
+  { num: '07', title: 'Label format — A6 and thermal options', tag: 'Labels', tagClass: 'blue', time: '2 weeks ago', slug: 'labels', artIdx: 1 },
+  { num: '08', title: 'Return status definitions', tag: 'Returns', tagClass: 'blue', time: '3 weeks ago', slug: 'returns', artIdx: 1 }
+];
+
+/* ── BUILD ARTICLE ROW HTML ── */
+function buildArticleRow(item, isNew) {
+  const id = `art-${item.slug}-${item.artIdx}-${item.num}`;
+  const artData = (ARTICLES[item.slug] || [])[item.artIdx] || null;
+  const content = artData ? artData.content : `<p>More details coming soon. Contact us at support@flaship.pk for help.</p>`;
+
+  return `
+    <div class="art-row" id="${id}">
+      <div class="art-row-trigger" onclick="toggleArtRow('${id}')" role="button" tabindex="0" aria-expanded="false">
+        <span class="art-row-num">${item.num}</span>
+        <div class="art-row-mid">
+          <span class="art-row-title">${item.title}</span>
+          <span class="art-row-badge ${item.tagClass}">${item.tag}</span>
+        </div>
+        ${isNew ? `<span class="art-row-time">${item.time}</span>` : ''}
+        <span class="art-row-arr">→</span>
+      </div>
+      <div class="art-row-content" id="${id}-content">
+        <div class="art-row-content-inner">${content}</div>
+      </div>
+    </div>
+  `;
+}
+
+document.getElementById('popular-list').innerHTML = POPULAR_ARTICLES.map(a => buildArticleRow(a, false)).join('');
+document.getElementById('new-list').innerHTML = NEW_ARTICLES.map(a => buildArticleRow(a, true)).join('');
+
+function toggleArtRow(id) {
+  const row = document.getElementById(id);
+  const content = document.getElementById(id + '-content');
+  const arr = row.querySelector('.art-row-arr');
+  const isOpen = row.classList.contains('open');
+
+  // Close all
+  document.querySelectorAll('.art-row.open').forEach(r => {
+    r.classList.remove('open');
+    const c = r.querySelector('.art-row-content');
+    if (c) c.classList.remove('open');
+  });
+
+  if (!isOpen) {
+    row.classList.add('open');
+    content.classList.add('open');
+    // scroll into view after expand
+    setTimeout(() => {
+      row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 60);
+  }
+}
+
+/* ── CATEGORY CARD PANELS ── */
+const CATEGORY_NAMES = {
+  'getting-started': 'Getting Started',
+  'booking': 'Booking Shipments',
+  'tracking': 'Tracking & Status',
+  'payments': 'Payments & COD',
+  'returns': 'Returns Management',
+  'labels': 'Labels & Documents',
+  'integrations': 'Integrations & API',
+  'account': 'Account & Security'
+};
+
+// Top row cards (1-4) → panel-row-1, Bottom row (5-8) → panel-row-2
+const TOP_ROW = ['getting-started', 'booking', 'tracking', 'payments'];
+const BOTTOM_ROW = ['returns', 'labels', 'integrations', 'account'];
+
+let openCat = null;
+
+function buildPanelArticles(slug, listEl) {
+  const arts = ARTICLES[slug] || [];
+  listEl.innerHTML = arts.map((art, idx) => {
+    const id = `panart-${slug}-${idx}`;
+    return `
+      <div>
+        <div class="panel-article-item" id="${id}" onclick="togglePanelArt('${id}', '${idx}')" role="button" tabindex="0" aria-expanded="false">
+          <span class="pan-art-num">${String(idx + 1).padStart(2, '0')}</span>
+          <span class="pan-art-text">${art.title}</span>
+          <span class="pan-art-tag">${art.tag}</span>
+          <span class="pan-art-arr">→</span>
+        </div>
+        <div class="pan-art-content" id="${id}-content">
+          <div class="pan-art-content-inner">${art.content}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function togglePanelArt(id) {
+  const item = document.getElementById(id);
+  const content = document.getElementById(id + '-content');
+  const isOpen = item.classList.contains('open');
+
+  // Close all panel articles in the same panel
+  const panel = item.closest('.panel-articles-list');
+  panel.querySelectorAll('.panel-article-item.open').forEach(el => {
+    el.classList.remove('open');
+    document.getElementById(el.id + '-content')?.classList.remove('open');
+  });
+
+  if (!isOpen) {
+    item.classList.add('open');
+    content.classList.add('open');
+  }
+}
+
+function openCategoryPanel(slug) {
+  const isTop = TOP_ROW.includes(slug);
+  const panelRow = document.getElementById(isTop ? 'cat-panel-row' : 'cat-panel-row-2');
+  const panelTitle = document.getElementById(isTop ? 'cat-panel-title' : 'cat-panel-title-2');
+  const panelList = document.getElementById(isTop ? 'panel-articles-list' : 'panel-articles-list-2');
+
+  // Close other panel if open
+  const otherRow = document.getElementById(isTop ? 'cat-panel-row-2' : 'cat-panel-row');
+  if (otherRow) {
+    otherRow.classList.remove('open');
+    // Mark those cards as closed
+    (isTop ? BOTTOM_ROW : TOP_ROW).forEach(s => {
+      const card = document.getElementById('cat-' + s);
+      if (card) { card.classList.remove('open'); card.setAttribute('aria-expanded', 'false'); }
+    });
+  }
+
+  // If same panel already open with this slug → close it
+  if (openCat === slug && panelRow.classList.contains('open')) {
+    panelRow.classList.remove('open');
+    document.getElementById('cat-' + slug)?.classList.remove('open');
+    document.getElementById('cat-' + slug)?.setAttribute('aria-expanded', 'false');
+    openCat = null;
+    return;
+  }
+
+  // Close all cards in same row
+  (isTop ? TOP_ROW : BOTTOM_ROW).forEach(s => {
+    const card = document.getElementById('cat-' + s);
+    if (card) { card.classList.remove('open'); card.setAttribute('aria-expanded', 'false'); }
+  });
+
+  // Populate and open
+  panelTitle.textContent = CATEGORY_NAMES[slug] || slug;
+  buildPanelArticles(slug, panelList);
+
+  panelRow.classList.add('open');
+  document.getElementById('cat-' + slug)?.classList.add('open');
+  document.getElementById('cat-' + slug)?.setAttribute('aria-expanded', 'true');
+  openCat = slug;
+
+  // Scroll panel into view
+  setTimeout(() => {
+    panelRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 80);
+}
+
+// Attach category card click handlers
+document.querySelectorAll('.cat-card').forEach(card => {
+  const slug = card.getAttribute('data-slug');
+  card.addEventListener('click', () => openCategoryPanel(slug));
+  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCategoryPanel(slug); } });
+});
+
+// Close panel buttons
+document.getElementById('cat-panel-close').addEventListener('click', () => {
+  document.getElementById('cat-panel-row').classList.remove('open');
+  TOP_ROW.forEach(s => {
+    const c = document.getElementById('cat-' + s);
+    if (c) { c.classList.remove('open'); c.setAttribute('aria-expanded', 'false'); }
+  });
+  openCat = null;
+});
+document.getElementById('cat-panel-close-2').addEventListener('click', () => {
+  document.getElementById('cat-panel-row-2').classList.remove('open');
+  BOTTOM_ROW.forEach(s => {
+    const c = document.getElementById('cat-' + s);
+    if (c) { c.classList.remove('open'); c.setAttribute('aria-expanded', 'false'); }
+  });
+  openCat = null;
+});
+
+/* ── FAQ ACCORDION ── */
+function toggleFaq(id) {
+  const item = document.getElementById(id);
+  const icon = item.querySelector('.faq-icon');
+  const answer = item.querySelector('.faq-answer');
+  const trigger = item.querySelector('.faq-trigger');
+  const isOpen = item.classList.contains('open');
+
+  // Close all
+  document.querySelectorAll('.faq-item.open').forEach(other => {
+    other.classList.remove('open');
+    other.querySelector('.faq-trigger').setAttribute('aria-expanded', 'false');
+    other.querySelector('.faq-answer').classList.remove('open');
+    other.querySelector('.faq-icon').textContent = '+';
+  });
+
+  if (!isOpen) {
+    item.classList.add('open');
+    trigger.setAttribute('aria-expanded', 'true');
+    answer.classList.add('open');
+    icon.textContent = '+';
+    // Lenis resize after accordion
+    setTimeout(() => { if (window._lenis) window._lenis.resize(); }, 350);
+  }
+}
+
+/* ── SEARCH ── */
+const SEARCH_INDEX = Object.entries(ARTICLES).flatMap(([slug, arts]) =>
+  arts.map((art, idx) => ({
+    title: art.title,
+    slug,
+    idx,
+    tag: art.tag,
+    icon: { 'payments': '💰', 'booking': '🚚', 'tracking': '📍', 'returns': '↩', 'labels': '🏷', 'integrations': '🔗', 'account': '🔒', 'getting-started': '⚡' }[slug] || '📦'
+  }))
+);
+
+const searchInput = document.getElementById('help-search-input');
+const searchResults = document.getElementById('help-search-results');
+let searchTimeout, hlIdx = -1;
+
+function highlight(text, q) {
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i === -1) return text;
+  return text.slice(0, i) + '<mark>' + text.slice(i, i + q.length) + '</mark>' + text.slice(i + q.length);
+}
+
+function doSearch(q) {
+  if (!q) { searchResults.classList.remove('open'); return; }
+  const matches = SEARCH_INDEX.filter(a =>
+    a.title.toLowerCase().includes(q.toLowerCase()) ||
+    a.tag.toLowerCase().includes(q.toLowerCase())
+  ).slice(0, 6);
+
+  if (!matches.length) {
+    searchResults.innerHTML = `<div class="sr-empty">No results for "<strong>${q}</strong>". Try searching "COD", "label", or "Shopify".</div>`;
+  } else {
+    searchResults.innerHTML = matches.map((m, i) => `
+      <div class="sr-item" data-slug="${m.slug}" data-idx="${m.idx}" data-i="${i}" role="option">
+        <span class="sr-item-icon">${m.icon}</span>
+        <span class="sr-item-title">${highlight(m.title, q)}</span>
+        <span class="sr-item-cat">${m.tag}</span>
+      </div>
+    `).join('');
+    searchResults.querySelectorAll('.sr-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const slug = el.getAttribute('data-slug');
+        const idx = parseInt(el.getAttribute('data-idx'));
+        searchResults.classList.remove('open');
+        searchInput.value = '';
+        // Scroll to category section and open panel
+        document.getElementById('topics').scrollIntoView({ behavior: 'smooth' });
+        setTimeout(() => {
+          openCategoryPanel(slug);
+          setTimeout(() => {
+            const panId = `panart-${slug}-${idx}`;
+            if (document.getElementById(panId)) {
+              togglePanelArt(panId);
+              document.getElementById(panId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }, 500);
+        }, 600);
+      });
+    });
+  }
+  hlIdx = -1;
+  searchResults.classList.add('open');
+}
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => doSearch(searchInput.value.trim()), 200);
+});
+
+searchInput.addEventListener('keydown', e => {
+  const items = searchResults.querySelectorAll('.sr-item');
+  if (e.key === 'ArrowDown') { e.preventDefault(); hlIdx = (hlIdx + 1) % items.length; items.forEach((el, i) => el.classList.toggle('hl', i === hlIdx)); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); hlIdx = (hlIdx - 1 + items.length) % items.length; items.forEach((el, i) => el.classList.toggle('hl', i === hlIdx)); }
+  else if (e.key === 'Enter') { if (hlIdx >= 0) items[hlIdx]?.click(); }
+  else if (e.key === 'Escape') { searchResults.classList.remove('open'); searchInput.blur(); }
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#help-search-wrap')) searchResults.classList.remove('open');
+});
+
+// Ctrl+K / Cmd+K
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); searchInput.focus(); }
+});
+
+// Popular chips
+document.querySelectorAll('.popular-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const q = chip.getAttribute('data-q');
+    searchInput.value = q;
+    searchInput.focus();
+    doSearch(q);
+  });
+});
+
+/* ── NEWSLETTER ── */
+function handleSubscribe(e) {
+  e.preventDefault();
+  const btn = document.getElementById('nl-btn');
+  btn.textContent = '✓ Subscribed!';
+  btn.classList.add('done');
+  document.getElementById('nl-email').value = '';
+  setTimeout(() => { btn.textContent = 'Subscribe →'; btn.classList.remove('done'); }, 3000);
+}
+
+/* ── GSAP ANIMATIONS (all use fromTo to prevent invisible elements) ── */
+window.addEventListener('DOMContentLoaded', () => {
+  // Small delay to let core.js?v=3.7 initialize first
+  setTimeout(() => {
+    // Hero entrance is handled globally by animations.js runHeroAnim()
+    if (typeof gsap !== 'undefined') {
+      // Category cards
+      if (typeof ScrollTrigger !== 'undefined') {
+        gsap.fromTo('.cat-card',
+          { opacity: 0, y: 40, scale: 0.97 },
+          {
+            opacity: 1, y: 0, scale: 1,
+            duration: 0.65, stagger: 0.07, ease: 'power2.out',
+            scrollTrigger: { trigger: '#topics', start: 'top 85%', once: true }
+          }
+        );
+
+        // Article rows
+        gsap.fromTo('#popular-list .art-row',
+          { opacity: 0, x: -20 },
+          {
+            opacity: 1, x: 0,
+            duration: 0.5, stagger: 0.05, ease: 'power2.out',
+            scrollTrigger: { trigger: '#popular', start: 'top 85%', once: true }
+          }
+        );
+        gsap.fromTo('#new-list .art-row',
+          { opacity: 0, x: 20 },
+          {
+            opacity: 1, x: 0,
+            duration: 0.5, stagger: 0.05, ease: 'power2.out',
+            scrollTrigger: { trigger: '#popular', start: 'top 85%', once: true }
+          }
+        );
+
+        // FAQ items
+        gsap.fromTo('.faq-item',
+          { opacity: 0, y: 24 },
+          {
+            opacity: 1, y: 0,
+            duration: 0.5, stagger: 0.06, ease: 'power2.out',
+            scrollTrigger: { trigger: '#faq', start: 'top 85%', once: true }
+          }
+        );
+
+        // Step cards
+        gsap.fromTo('.step-card',
+          { opacity: 0, y: 36 },
+          {
+            opacity: 1, y: 0,
+            duration: 0.6, stagger: 0.1, ease: 'power2.out',
+            scrollTrigger: { trigger: '#how-it-works', start: 'top 85%', once: true }
+          }
+        );
+
+        // Support cards
+        gsap.fromTo('.supp-card',
+          { opacity: 0, y: 32 },
+          {
+            opacity: 1, y: 0,
+            duration: 0.6, stagger: 0.12, ease: 'power2.out',
+            scrollTrigger: { trigger: '#contact-strip', start: 'top 85%', once: true }
+          }
+        );
+      }
+    }
+  }, 400);
+});
+</script>
+
+</body>
+</html>

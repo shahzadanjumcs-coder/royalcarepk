@@ -1,6 +1,9 @@
 import "server-only";
 import { store, IS_DEMO_MODE } from "@/lib/store";
 import type { FlashipCourier, FlashipCity, FlashipPickup, Order, OrderItem } from "@/lib/types";
+import { buildFlashipBookingPayload, extractBookingIdentifiers, unwrap } from "./wire";
+
+export { normalizePkPhone } from "./wire";
 import { decryptSecret } from "@/lib/crypto/secret-box";
 import { logAudit, type Actor } from "@/lib/services/audit";
 import { notifyAdmins } from "@/lib/services/notifications";
@@ -167,13 +170,13 @@ async function simulateCatalog(type: "couriers" | "cities" | "pickups") {
 }
 
 function simulateBooking(payload: Record<string, unknown>) {
+  // Mirrors the official success response: { success, orderNo, trackingId }
   const cn = `CN${Math.floor(1000000000 + Math.random() * 9000000000)}`;
   return simulate({
     success: true,
-    id: `FLB${Math.floor(10000000 + Math.random() * 89999999)}`,
-    tracking_number: cn,
-    courier_code: payload.courier_code,
-    external_ref_no: payload.external_ref_no,
+    orderNo: payload.externalRefNo ?? `FLB${Math.floor(10000000 + Math.random() * 89999999)}`,
+    trackingId: cn,
+    courierCompany: payload.courierCompany,
     status: "BOOKED",
     message: "Booking created successfully (simulated)",
   });
@@ -291,19 +294,6 @@ interface RawCatalog {
   cities: Record<string, unknown>[];
 }
 
-function unwrap(payload: unknown): Record<string, unknown> {
-  // Response may be the body itself, { data: {...} }, { result: {...} } etc.
-  let obj = payload as Record<string, unknown>;
-  for (const key of ["data", "result", "payload", "response"]) {
-    if (obj && typeof obj === "object" && obj[key] && typeof obj[key] === "object" && !Array.isArray(obj[key])) {
-      const inner = obj[key] as Record<string, unknown>;
-      if ("couriers" in inner || "pickups" in inner || "operational_cities" in inner) return inner;
-      obj = inner;
-    }
-  }
-  return obj ?? {};
-}
-
 function extractCityName(city: unknown): string {
   if (typeof city === "string") return city.trim();
   if (city && typeof city === "object") {
@@ -324,7 +314,7 @@ function normalizeCatalog(payload: unknown): RawCatalog {
     for (const c of couriersRaw) {
       if (!c || typeof c !== "object") continue;
       const o = c as Record<string, unknown>;
-      const code = String(o.code ?? o.courier_code ?? o.id ?? "").toLowerCase().trim();
+      const code = String(o.code ?? o.courier_code ?? o.id ?? "").trim();
       const label = String(o.display_name ?? o.name ?? code).trim();
       if (code) couriers.push({ courier_id: code, name: label || code, code });
     }
@@ -402,6 +392,12 @@ export async function syncCatalog(type: "couriers" | "cities" | "pickups" | "all
       byId.set(cid, { courier_id: cid, name, active: true, synced_at: now });
     }
     if (byId.size) await store.upsertMany("flaship_couriers", [...byId.values()], ["courier_id"]);
+    // Deactivate rows absent from the fresh catalog (e.g. pre-fix lowercased
+    // duplicates) so bookings only ever use verbatim catalog values.
+    const { rows: existingCouriers } = await store.list<{ id: string; courier_id: string }>("flaship_couriers", { filters: { active: true }, perPage: 1000 });
+    for (const row of existingCouriers) {
+      if (!byId.has(row.courier_id)) await store.update("flaship_couriers", row.id, { active: false });
+    }
     counts.couriers = byId.size;
   }
   if (type === "cities" || type === "all") {
@@ -469,14 +465,6 @@ export interface BookingResult {
   courierName: string;
 }
 
-/** Normalize Pakistani phone formats: +92 / 92 prefixes → leading 0 (per Flaship plugin). */
-export function normalizePkPhone(phone: string): string {
-  const cleaned = String(phone ?? "").replace(/[^0-9+]/g, "");
-  if (cleaned.startsWith("+92")) return `0${cleaned.slice(3)}`;
-  if (cleaned.startsWith("92")) return `0${cleaned.slice(2)}`;
-  return cleaned;
-}
-
 /**
  * Book an order with Flaship (server-side only).
  * Duplicate prevention: refuses to book when a booking id / CN already exists.
@@ -514,10 +502,6 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
   const cfg = await getFlashipConfig();
   const customer = await store.get<{ name: string; phone: string; email: string | null }>("customers", order.customer_id);
   const { rows: items } = await store.list<OrderItem>("order_items", { filters: { order_id: orderId }, perPage: 50 });
-  const productName = items.length
-    ? items.map((i) => `${i.product_name} (x${i.quantity})`).join(" -- ")
-    : "Products";
-  const pieces = Math.max(1, items.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0));
 
   // mark as pending so concurrent clicks don't double-book
   await store.update("orders", orderId, { booking_status: "pending" });
@@ -525,23 +509,8 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
   try {
     let result: Record<string, unknown>;
 
-    // Payload structure mirrors the official Flaship Integration API (WooCommerce plugin reference)
-    const payload: Record<string, unknown> = {
-      pickup_id: Number.parseInt(String(opts?.pickup ?? cfg.default_pickup ?? "0"), 10) || 0,
-      courier_code: String(opts?.courier ?? cfg.default_courier ?? "").toLowerCase(),
-      service_type: String(opts?.serviceType ?? cfg.default_service_type ?? "overnight").toLowerCase(),
-      product_name: productName,
-      net_weight: String(cfg.default_weight ?? 0.5),
-      pieces,
-      cod_amount: order.cod_amount ?? 0,
-      consignee_name: customer?.name ?? "Customer",
-      consignee_phone_primary: normalizePkPhone(customer?.phone ?? ""),
-      consignee_phone_secondary: "",
-      consignee_address: order.delivery_address,
-      consignee_city: order.city,
-      special_instruction: order.notes ?? "",
-      external_ref_no: order.order_number,
-    };
+    // Official Flaship Integration API field names (camelCase) — see wire.ts.
+    const payload = buildFlashipBookingPayload({ order, customer, items, cfg, opts });
 
     if (cfg.mode === "live") {
       result = await liveRequest<Record<string, unknown>>(cfg, cfg.endpoints.bookings, {
@@ -553,11 +522,8 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
       result = (await simulateBooking(payload)) as Record<string, unknown>;
     }
 
-    // Response shape: { success, tracking_number, courier_code, id / external_ref_no, data? }
-    const body = unwrap(result);
-    const bookingId = String(body.id ?? body.booking_id ?? body.bookingId ?? body.external_ref_no ?? `FLB${Date.now()}`);
-    const cn = String(body.tracking_number ?? body.trackingNumber ?? body.cn ?? "");
-    const courierCode = String(body.courier_code ?? payload.courier_code ?? "").toLowerCase();
+    // Response shape (official): { success, orderNo, trackingId } — legacy shapes tolerated.
+    const { bookingId, cn, courierCode, body } = extractBookingIdentifiers(result);
     const courierName = courierCode
       ? courierCode.toUpperCase()
       : String(body.courier_name ?? opts?.courier ?? cfg.default_courier ?? "Flaship");
@@ -580,7 +546,7 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
       tracking_number: cn,
       booking_id: bookingId,
       destination_city: order.city,
-      pickup_location: payload.pickup_id ? String(payload.pickup_id) : null,
+      pickup_location: payload.pickuplocation ? String(payload.pickuplocation) : null,
       shipment_status: "BOOKED",
       booked_at: new Date().toISOString(),
       last_synced_at: null,

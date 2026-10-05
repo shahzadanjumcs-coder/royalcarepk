@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, ShoppingCart, Users, HardHat, Network, PercentCircle, Wallet, Boxes, Tags, Building2, Truck, Radar, BookOpen, BarChart3, Bell, ScrollText, Settings, MapPin, Globe, Handshake, ArrowDownToLine, ArrowUpFromLine, History, ClipboardList, ClipboardCheck, FileSpreadsheet, Landmark } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Users, HardHat, Network, PercentCircle, Wallet, Boxes, Tags, Building2, Truck, Radar, BookOpen, BarChart3, Bell, ScrollText, Settings, MapPin, Globe, Handshake, ArrowDownToLine, ArrowUpFromLine, History, ClipboardList, ClipboardCheck, FileSpreadsheet, Landmark, MessageCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface NavItem {
@@ -68,6 +68,10 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "Cities", href: "/admin/flaship/cities", icon: Globe },
       { label: "Pickup Locations", href: "/admin/flaship/pickups", icon: MapPin },
     ],
+  },
+  {
+    title: "WhatsApp",
+    items: [{ label: "WhatsApp Bot", href: "/admin/whatsapp", icon: MessageCircle }],
   },
   {
     title: "Accounts",

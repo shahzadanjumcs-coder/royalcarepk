@@ -5,6 +5,7 @@ import { decryptSecret } from "@/lib/crypto/secret-box";
 import { logAudit, type Actor } from "@/lib/services/audit";
 import { notifyAdmins } from "@/lib/services/notifications";
 import { changeOrderStatus } from "@/lib/services/orders";
+import { enqueueWhatsAppOrderEvent } from "@/lib/services/whatsapp";
 
 export class FlashipError extends Error {}
 
@@ -794,6 +795,22 @@ export async function syncOrderTracking(session: Actor | null, orderId: string):
       shipment_status: courierStatus ?? "UNKNOWN",
       last_synced_at: new Date().toISOString(),
     });
+  }
+
+  // ---- WhatsApp notification fan-out (courier-level events; never throws) ----
+  // OUT_FOR_DELIVERY and SHIPPER ADVISE never change the RoyalCarePK order
+  // status (they are courier-side states), so they are detected here on the
+  // raw courier status. Idempotency keys make repeated syncs safe.
+  const courierUpper = String(courierStatus ?? "").toUpperCase();
+  if (courierUpper === "OUT_FOR_DELIVERY") {
+    await enqueueWhatsAppOrderEvent({ orderId, type: "OUT_FOR_DELIVERY" });
+  }
+  if (
+    courierUpper.includes("SHIPPER_ADVISE") ||
+    courierUpper.includes("SHIPPER ADVISE") ||
+    courierUpper.includes("RETURN_TO_SHIPPER")
+  ) {
+    await enqueueWhatsAppOrderEvent({ orderId, type: "SHIPPER_ADVISE" });
   }
 
   if (mapped?.status && order.status !== mapped.status) {

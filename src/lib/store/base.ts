@@ -27,7 +27,15 @@ export type TableName =
   | "inventory_movements"
   | "notifications"
   | "audit_logs"
-  | "settings";
+  | "settings"
+  | "whatsapp_accounts"
+  | "whatsapp_routing_settings"
+  | "whatsapp_admin_recipients"
+  | "whatsapp_group_settings"
+  | "whatsapp_bot_settings"
+  | "whatsapp_message_queue"
+  | "whatsapp_message_logs"
+  | "whatsapp_commands";
 
 export interface ListOptions {
   filters?: Record<string, unknown>;

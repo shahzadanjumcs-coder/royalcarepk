@@ -17,13 +17,14 @@ export const GET = withAuth(["super_admin", "admin", "worker"], async (session) 
     });
   }
 
-  const [customers, products, workers, couriers, cities, pickups, cfg] = await Promise.all([
+  const [customers, products, workers, couriers, cities, pickups, pickupCouriers, cfg] = await Promise.all([
     store.list<{ id: string; name: string; phone: string; city: string | null; address: string | null }>("customers", { filters: { status: "active" }, orderBy: { field: "name", dir: "asc" } }),
     store.list<{ id: string; name: string; sku: string; selling_price: number; current_stock: number; reserved_stock: number; status: string }>("products", { filters: { status: "active" }, orderBy: { field: "name", dir: "asc" } }),
     store.list<{ id: string; name: string; commission_rate: number; status: string }>("profiles", { filters: { role: "worker", status: "active" }, orderBy: { field: "name", dir: "asc" } }),
     store.list<{ id: string; courier_id: string; name: string }>("flaship_couriers", { filters: { active: true } }),
     store.list<{ id: string; city_id: string; name: string }>("flaship_cities", { filters: { active: true } }),
     store.list<{ id: string; pickup_id: string; name: string; city: string | null }>("flaship_pickups", { filters: { active: true } }),
+    store.list<{ pickup_id: string; courier_id: string }>("flaship_pickup_couriers"),
     getFlashipConfig(),
   ]);
   return ok({
@@ -33,6 +34,9 @@ export const GET = withAuth(["super_admin", "admin", "worker"], async (session) 
     couriers: couriers.rows,
     cities: cities.rows,
     pickups: pickups.rows,
+    // pickup↔courier mapping (Flaship merchant_pickup_couriers) — lets the
+    // booking UI offer only pickup locations actually enabled for the courier.
+    pickup_couriers: pickupCouriers.rows,
     flaship: { mode: cfg.mode, default_courier: cfg.default_courier ?? null, default_pickup: cfg.default_pickup ?? null },
   });
 });

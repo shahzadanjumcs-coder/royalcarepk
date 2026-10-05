@@ -246,6 +246,23 @@ const pickups: Row[] = [
 }));
 put("flaship_pickups", pickups);
 
+// pickup↔courier mapping (mirrors Flaship's merchant_pickup_couriers): the
+// demo catalog deliberately leaves some couriers unmapped so the booking UI's
+// mapped-pickup filtering is exercised in simulator mode too.
+const pickupLinks: Row[] = [
+  ["tcs", pickups[0].pickup_id],
+  ["tcs", pickups[2].pickup_id],
+  ["leopards", pickups[0].pickup_id],
+  ["leopards", pickups[1].pickup_id],
+  ["mp", pickups[1].pickup_id],
+].map(([courierId, pickupId]) => ({
+  id: id("flpc"),
+  courier_id: courierId as string,
+  pickup_id: pickupId as string,
+  synced_at: daysAgoISO(3),
+}));
+put("flaship_pickup_couriers", pickupLinks);
+
 // ---------------- Orders ----------------
 const orders: Row[] = [];
 const orderItems: Row[] = [];

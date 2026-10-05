@@ -2,6 +2,14 @@ import "server-only";
 import { store, IS_DEMO_MODE } from "@/lib/store";
 import type { FlashipCourier, FlashipCity, FlashipPickup, Order, OrderItem } from "@/lib/types";
 import { decryptSecret } from "@/lib/crypto/secret-box";
+import {
+  buildBookingPayload,
+  extractApiErrorMessage,
+  extractCatalog,
+  isPairMapped,
+  parseBookingResponse,
+  type ExtractedCatalog,
+} from "@/lib/flaship/protocol";
 import { logAudit, type Actor } from "@/lib/services/audit";
 import { notifyAdmins } from "@/lib/services/notifications";
 import { changeOrderStatus } from "@/lib/services/orders";
@@ -11,12 +19,21 @@ export class FlashipError extends Error {}
 /**
  * Flaship Integration API client — server-side only.
  *
- * Technical reference: official Flaship WooCommerce plugin (Integration API v2):
- *   GET  {base}/catalog/                       → couriers, pickups, operational cities
- *   POST {base}/bookings/                      → create booking (returns tracking_number)
- *   GET  {base}/orders/{tracking_number}/tracking/  → tracking + history
+ * Technical reference (official Flaship /help spec, Integration API):
+ *   GET  {base}/catalog/            → pickupAddress, companies (each carrying its
+ *                                     enabled pickup locations), rateCards, cities
+ *   POST {base}/bookings/           → camelCase payload (consigneeName…, courierCompany,
+ *                                     courierOption, pickuplocation); values sent VERBATIM —
+ *                                     Flaship matches the courier/pickup pair case-sensitively
+ *                                     against its merchant_pickup_couriers mapping
+ *   Success: {"success": true, "orderNo": 12345, "trackingId": "FLP123456789"}
+ *   GET  {base}/orders/{cn}/tracking/  → tracking + history
  *   Auth: header `X-API-KEY: <integration token>`
  *   Base URL must point at the Integration API root (…/api/integration/).
+ *
+ * Pure protocol helpers (payload builder, catalog extraction incl. the
+ * pickup↔courier mapping, DRF-style error parsing) live in ./protocol.ts and
+ * are unit-tested in tests/flaship_protocol.test.ts.
  *
  * The API key never leaves the server: env FLASHIP_API_KEY wins, otherwise an
  * AES-256-GCM encrypted copy stored in the settings table. Logs are redacted.
@@ -166,13 +183,14 @@ async function simulateCatalog(type: "couriers" | "cities" | "pickups") {
 }
 
 function simulateBooking(payload: Record<string, unknown>) {
-  const cn = `CN${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+  // Mirrors the OFFICIAL success shape ({success, orderNo, trackingId}) so the
+  // simulator exercises exactly the same response parser as the live API.
+  const cn = `FLP${Math.floor(1000000000 + Math.random() * 9000000000)}`;
   return simulate({
     success: true,
-    id: `FLB${Math.floor(10000000 + Math.random() * 89999999)}`,
-    tracking_number: cn,
-    courier_code: payload.courier_code,
-    external_ref_no: payload.external_ref_no,
+    orderNo: Math.floor(100000 + Math.random() * 899999),
+    trackingId: cn,
+    courierCompany: payload.courierCompany,
     status: "BOOKED",
     message: "Booking created successfully (simulated)",
   });
@@ -252,11 +270,9 @@ async function liveRequest<T>(
       error: success ? null : `HTTP ${res.status}`,
     });
     if (!res.ok) {
-      const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
-      const apiMsg = obj
-        ? (["message", "detail", "error"] as const).map((k) => obj[k]).find((x) => x && String(x).trim())
-        : null;
-      throw new FlashipError(apiMsg ? String(apiMsg) : `Flaship API error (HTTP ${res.status})`);
+      // Surfaced field-level DRF errors too, e.g.
+      // {"pickup_id":"Pickup is not synced to this courier …"} → shown verbatim.
+      throw new FlashipError(extractApiErrorMessage(parsed, res.status));
     }
     return parsed as T;
   } catch (e) {
@@ -283,93 +299,21 @@ async function liveRequest<T>(
 }
 
 // ---------------- Catalog (GET /catalog/) ----------------
+// Extraction lives in protocol.ts (pure + unit-tested): extractCatalog() reads
+// the official response keys (`companies`, `pickupAddress`) with legacy
+// fallbacks, preserves the ORIGINAL identifier casing, and returns the
+// pickup↔courier mapping (`links`) alongside couriers / pickups / cities.
 
-interface RawCatalog {
-  couriers: Record<string, unknown>[];
-  pickups: Record<string, unknown>[];
-  cities: Record<string, unknown>[];
-}
-
-function unwrap(payload: unknown): Record<string, unknown> {
-  // Response may be the body itself, { data: {...} }, { result: {...} } etc.
-  let obj = payload as Record<string, unknown>;
-  for (const key of ["data", "result", "payload", "response"]) {
-    if (obj && typeof obj === "object" && obj[key] && typeof obj[key] === "object" && !Array.isArray(obj[key])) {
-      const inner = obj[key] as Record<string, unknown>;
-      if ("couriers" in inner || "pickups" in inner || "operational_cities" in inner) return inner;
-      obj = inner;
-    }
-  }
-  return obj ?? {};
-}
-
-function extractCityName(city: unknown): string {
-  if (typeof city === "string") return city.trim();
-  if (city && typeof city === "object") {
-    const o = city as Record<string, unknown>;
-    const name = o.name ?? o.cityname ?? o.city_name ?? o.City ?? o.terminal_name;
-    return name ? String(name).trim() : "";
-  }
-  return "";
-}
-
-/** Normalize the /catalog/ response into couriers / pickups / unique cities. */
-function normalizeCatalog(payload: unknown): RawCatalog {
-  const body = unwrap(payload);
-  const dataObj = (body.data && typeof body.data === "object" ? body.data : {}) as Record<string, unknown>;
-  const couriers: Record<string, unknown>[] = [];
-  const couriersRaw = body.couriers ?? dataObj.couriers;
-  if (Array.isArray(couriersRaw)) {
-    for (const c of couriersRaw) {
-      if (!c || typeof c !== "object") continue;
-      const o = c as Record<string, unknown>;
-      const code = String(o.code ?? o.courier_code ?? o.id ?? "").toLowerCase().trim();
-      const label = String(o.display_name ?? o.name ?? code).trim();
-      if (code) couriers.push({ courier_id: code, name: label || code, code });
-    }
-  }
-
-  const pickups: Record<string, unknown>[] = [];
-  const pickupsRaw = body.pickups ?? body.pickup_locations ?? body.pickup_points ?? dataObj.pickups;
-  if (Array.isArray(pickupsRaw)) {
-    for (const p of pickupsRaw) {
-      if (!p || typeof p !== "object") continue;
-      const o = p as Record<string, unknown>;
-      const pid = String(o.id ?? o.pickup_id ?? "");
-      const name = String(o.name ?? o.title ?? "");
-      if (pid || name) pickups.push({ pickup_id: pid, name: name || pid, address: o.address ?? null, city: o.city ?? null, contact: o.contact ?? o.phone ?? null });
-    }
-  }
-
-  const cityMap = new Map<string, Record<string, unknown>>();
-  const citiesRaw = body.operational_cities ?? body.cities ?? dataObj.operational_cities;
-  if (Array.isArray(citiesRaw)) {
-    for (const c of citiesRaw) {
-      const name = extractCityName(c);
-      if (name) cityMap.set(name.toLowerCase(), { city_id: name.toLowerCase(), name, province: null });
-    }
-  } else if (citiesRaw && typeof citiesRaw === "object") {
-    // Integration API keys operational_cities by lowercase courier_code
-    for (const list of Object.values(citiesRaw as Record<string, unknown>)) {
-      if (!Array.isArray(list)) continue;
-      for (const c of list) {
-        const name = extractCityName(c);
-        if (name) cityMap.set(name.toLowerCase(), { city_id: name.toLowerCase(), name, province: null });
-      }
-    }
-  }
-
-  return { couriers, pickups, cities: [...cityMap.values()] };
-}
-
-/** Fetch + persist the catalog (couriers / cities / pickup locations). */
-export async function syncCatalog(type: "couriers" | "cities" | "pickups" | "all"): Promise<{ couriers: number; cities: number; pickups: number }> {
+/** Fetch + persist the catalog (couriers / cities / pickups + pickup↔courier mapping). */
+export async function syncCatalog(
+  type: "couriers" | "cities" | "pickups" | "all"
+): Promise<{ couriers: number; cities: number; pickups: number; links: number }> {
   const cfg = await getFlashipConfig();
-  let catalog: RawCatalog;
+  let catalog: ExtractedCatalog;
 
   if (cfg.mode === "live") {
     const res = await liveRequest<unknown>(cfg, cfg.endpoints.catalog);
-    catalog = normalizeCatalog(res);
+    catalog = extractCatalog(res);
     if (!catalog.couriers.length && !catalog.cities.length && !catalog.pickups.length) {
       throw new FlashipError("Flaship catalog response was empty. Verify the API key and base URL.");
     }
@@ -379,36 +323,50 @@ export async function syncCatalog(type: "couriers" | "cities" | "pickups" | "all
       simulateCatalog("cities") as Promise<Record<string, unknown>[]>,
       simulateCatalog("pickups") as Promise<Record<string, unknown>[]>,
     ]);
-    catalog = { couriers, cities: cities as unknown as RawCatalog["cities"], pickups };
+    catalog = {
+      couriers: couriers as unknown as ExtractedCatalog["couriers"],
+      cities: cities as unknown as ExtractedCatalog["cities"],
+      pickups: pickups as unknown as ExtractedCatalog["pickups"],
+      links: [],
+    };
   }
 
   const now = new Date().toISOString();
-  const counts = { couriers: 0, cities: 0, pickups: 0 };
+  const counts = { couriers: 0, cities: 0, pickups: 0, links: 0 };
 
   // The catalog is persisted with bulk upserts keyed on each table's UNIQUE
-  // business column (courier_id / city_id / pickup_id). The previous
-  // read-then-insert/update loop could only compare against the first page of
-  // existing rows (PostgREST caps unpaginated reads at ~1,000), so catalogs
-  // larger than the cap raised duplicate-key errors (e.g. 2,700+ cities).
-  // Conflict resolution now happens in the database on the constraint itself:
+  // business column(s) (courier_id / city_id / pickup_id / pickup_id+courier_id).
+  // Conflict resolution happens in the database on the constraint itself:
   // safe at any size and idempotent across repeat refreshes.
   if (type === "couriers" || type === "all") {
     const byId = new Map<string, Record<string, unknown>>();
     for (const item of catalog.couriers) {
-      const cid = String(item.courier_id ?? item.id ?? "");
-      const name = String(item.name ?? item.courier_name ?? "");
+      const cid = item.courier_id.trim();
+      const name = item.name.trim();
       if (!cid || !name) continue;
+      // Original casing preserved — Flaship matches courierCompany verbatim.
       byId.set(cid, { courier_id: cid, name, active: true, synced_at: now });
     }
-    if (byId.size) await store.upsertMany("flaship_couriers", [...byId.values()], ["courier_id"]);
+    if (byId.size) {
+      await store.upsertMany("flaship_couriers", [...byId.values()], ["courier_id"]);
+      // Deactivate rows the fresh catalog no longer reports (e.g. courier ids
+      // stored lowercased by older sync versions) so the UI never offers a
+      // value Flaship would reject.
+      const { rows: existing } = await store.list<{ id: string; courier_id: string; active: boolean }>("flaship_couriers");
+      for (const row of existing) {
+        if (!byId.has(row.courier_id) && row.active !== false) {
+          await store.update("flaship_couriers", row.id, { active: false });
+        }
+      }
+    }
     counts.couriers = byId.size;
   }
   if (type === "cities" || type === "all") {
     const byId = new Map<string, Record<string, unknown>>();
     for (const item of catalog.cities) {
-      const name = String(item.name ?? item.city ?? "").trim();
+      const name = item.name.trim();
       if (!name) continue;
-      const cid = String(item.city_id ?? item.id ?? name.toLowerCase());
+      const cid = item.city_id || name.toLowerCase();
       byId.set(cid, { city_id: cid, name, province: item.province ?? null, active: true, synced_at: now });
     }
     if (byId.size) await store.upsertMany("flaship_cities", [...byId.values()], ["city_id"]);
@@ -417,13 +375,40 @@ export async function syncCatalog(type: "couriers" | "cities" | "pickups" | "all
   if (type === "pickups" || type === "all") {
     const byId = new Map<string, Record<string, unknown>>();
     for (const item of catalog.pickups) {
-      const pid = String(item.pickup_id ?? item.id ?? "");
-      const name = String(item.name ?? "");
+      const pid = item.pickup_id.trim();
+      const name = item.name.trim();
       if (!pid || !name) continue;
-      byId.set(pid, { pickup_id: pid, name, address: item.address ? String(item.address) : null, city: item.city ? String(item.city) : null, contact: item.contact ? String(item.contact) : null, active: true, synced_at: now });
+      byId.set(pid, { pickup_id: pid, name, address: item.address, city: item.city, contact: item.contact, active: true, synced_at: now });
     }
-    if (byId.size) await store.upsertMany("flaship_pickups", [...byId.values()], ["pickup_id"]);
+    if (byId.size) {
+      await store.upsertMany("flaship_pickups", [...byId.values()], ["pickup_id"]);
+      const { rows: existing } = await store.list<{ id: string; pickup_id: string; active: boolean }>("flaship_pickups");
+      for (const row of existing) {
+        if (!byId.has(row.pickup_id) && row.active !== false) {
+          await store.update("flaship_pickups", row.id, { active: false });
+        }
+      }
+    }
     counts.pickups = byId.size;
+  }
+
+  // Persist the pickup↔courier mapping (Flaship's merchant_pickup_couriers) so
+  // the booking UI offers only pairs Flaship accepts. Full refresh: edges
+  // absent from the fresh catalog are removed — but ONLY when the fresh
+  // catalog actually reported links, so an unrecognized response shape never
+  // wipes existing mapping data.
+  if ((type === "all" || type === "couriers") && cfg.mode === "live" && catalog.links.length) {
+    await store.upsertMany(
+      "flaship_pickup_couriers",
+      catalog.links.map((l) => ({ pickup_id: l.pickup_id, courier_id: l.courier_id, synced_at: now })),
+      ["pickup_id", "courier_id"]
+    );
+    const { rows: existingLinks } = await store.list<{ id: string; pickup_id: string; courier_id: string }>("flaship_pickup_couriers");
+    const fresh = new Set(catalog.links.map((l) => `${l.pickup_id}\u0000${l.courier_id}`));
+    for (const row of existingLinks) {
+      if (!fresh.has(`${row.pickup_id}\u0000${row.courier_id}`)) await store.delete("flaship_pickup_couriers", row.id);
+    }
+    counts.links = catalog.links.length;
   }
   return counts;
 }
@@ -449,10 +434,10 @@ export async function testFlashipConnection(): Promise<{ ok: boolean; message: s
   }
   try {
     const res = await liveRequest<unknown>(cfg, cfg.endpoints.catalog);
-    const catalog = normalizeCatalog(res);
+    const catalog = extractCatalog(res);
     return {
       ok: true,
-      message: `Connected. Catalog loaded: ${catalog.couriers.length} courier(s), ${catalog.cities.length} cit(ies), ${catalog.pickups.length} pickup location(s).`,
+      message: `Connected. Catalog loaded: ${catalog.couriers.length} courier(s), ${catalog.cities.length} cit(ies), ${catalog.pickups.length} pickup location(s), ${catalog.links.length} courier-pickup link(s).`,
       mode: "live",
     };
   } catch (e) {
@@ -468,13 +453,8 @@ export interface BookingResult {
   courierName: string;
 }
 
-/** Normalize Pakistani phone formats: +92 / 92 prefixes → leading 0 (per Flaship plugin). */
-export function normalizePkPhone(phone: string): string {
-  const cleaned = String(phone ?? "").replace(/[^0-9+]/g, "");
-  if (cleaned.startsWith("+92")) return `0${cleaned.slice(3)}`;
-  if (cleaned.startsWith("92")) return `0${cleaned.slice(2)}`;
-  return cleaned;
-}
+/** Normalizes Pakistani phone formats (+92/92 → 0). Implementation lives in protocol.ts. */
+export { normalizePkPhone } from "@/lib/flaship/protocol";
 
 /**
  * Book an order with Flaship (server-side only).
@@ -518,29 +498,51 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
     : "Products";
   const pieces = Math.max(1, items.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0));
 
+  // ---- courier / pickup selection (values pass through VERBATIM) ----
+  // Flaship matches both values case-sensitively against its
+  // merchant_pickup_couriers mapping — NEVER lowercase or parseInt them.
+  const courierCompany = String(opts?.courier ?? cfg.default_courier ?? "").trim();
+  const pickuplocation = String(opts?.pickup ?? cfg.default_pickup ?? "").trim();
+  if (!courierCompany) throw new FlashipError("Select a courier company before booking.");
+  if (!pickuplocation) throw new FlashipError("Select a pickup location before booking.");
+  const courierOption = String(opts?.serviceType ?? cfg.default_service_type ?? "overnight").trim();
+
+  // ---- server-side pair guard (live mode, when mapping data exists) ----
+  // Blocks exactly the production failure mode
+  // {"pickup_id":"Pickup is not synced to this courier …"} before the API call.
+  // No mapping data for the courier → don't block (Flaship stays the validator).
+  if (cfg.mode === "live") {
+    const { rows: mapped } = await store.list<{ pickup_id: string; courier_id: string }>("flaship_pickup_couriers", {
+      filters: { courier_id: courierCompany },
+    });
+    if (isPairMapped(courierCompany, pickuplocation, mapped) === false) {
+      throw new FlashipError(
+        `Pickup "${pickuplocation}" is not enabled for courier "${courierCompany}". Re-sync the Flaship catalog and pick a mapped pickup location.`
+      );
+    }
+  }
+
   // mark as pending so concurrent clicks don't double-book
   await store.update("orders", orderId, { booking_status: "pending" });
 
   try {
     let result: Record<string, unknown>;
 
-    // Payload structure mirrors the official Flaship Integration API (WooCommerce plugin reference)
-    const payload: Record<string, unknown> = {
-      pickup_id: Number.parseInt(String(opts?.pickup ?? cfg.default_pickup ?? "0"), 10) || 0,
-      courier_code: String(opts?.courier ?? cfg.default_courier ?? "").toLowerCase(),
-      service_type: String(opts?.serviceType ?? cfg.default_service_type ?? "overnight").toLowerCase(),
-      product_name: productName,
-      net_weight: String(cfg.default_weight ?? 0.5),
-      pieces,
-      cod_amount: order.cod_amount ?? 0,
-      consignee_name: customer?.name ?? "Customer",
-      consignee_phone_primary: normalizePkPhone(customer?.phone ?? ""),
-      consignee_phone_secondary: "",
-      consignee_address: order.delivery_address,
-      consignee_city: order.city,
-      special_instruction: order.notes ?? "",
-      external_ref_no: order.order_number,
-    };
+    // Official Integration API payload — 11 camelCase fields, values verbatim
+    // (see protocol.ts; pure + unit-tested).
+    const payload = buildBookingPayload({
+      courierCompany,
+      pickuplocation,
+      courierOption,
+      consigneeName: customer?.name ?? "Customer",
+      consigneePhone1: customer?.phone ?? "",
+      consigneeAddress: order.delivery_address,
+      destinationCity: order.city ?? "",
+      codAmount: Number(order.cod_amount ?? 0),
+      productName,
+      productWeight: Number(cfg.default_weight ?? 0.5),
+      productPieces: pieces,
+    });
 
     if (cfg.mode === "live") {
       result = await liveRequest<Record<string, unknown>>(cfg, cfg.endpoints.bookings, {
@@ -552,23 +554,15 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
       result = (await simulateBooking(payload)) as Record<string, unknown>;
     }
 
-    // Response shape: { success, tracking_number, courier_code, id / external_ref_no, data? }
-    const body = unwrap(result);
-    const bookingId = String(body.id ?? body.booking_id ?? body.bookingId ?? body.external_ref_no ?? `FLB${Date.now()}`);
-    const cn = String(body.tracking_number ?? body.trackingNumber ?? body.cn ?? "");
-    const courierCode = String(body.courier_code ?? payload.courier_code ?? "").toLowerCase();
-    const courierName = courierCode
-      ? courierCode.toUpperCase()
-      : String(body.courier_name ?? opts?.courier ?? cfg.default_courier ?? "Flaship");
-
-    if (!cn) throw new FlashipError("Flaship did not return a tracking number (CN).");
+    // Official success response: {"success": true, "orderNo": 12345, "trackingId": "FLP…"}
+    const { bookingId, trackingNumber: cn, courierName } = parseBookingResponse(result, courierCompany);
 
     await store.update("orders", orderId, {
       booking_status: "booked",
       flaship_booking_id: bookingId,
       tracking_number: cn,
       flaship_courier_name: courierName,
-      pickup_location_name: opts?.pickup ?? cfg.default_pickup ?? null,
+      pickup_location_name: pickuplocation,
       booking_error: null,
       booked_at: new Date().toISOString(),
     });
@@ -579,7 +573,7 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
       tracking_number: cn,
       booking_id: bookingId,
       destination_city: order.city,
-      pickup_location: payload.pickup_id ? String(payload.pickup_id) : null,
+      pickup_location: pickuplocation,
       shipment_status: "BOOKED",
       booked_at: new Date().toISOString(),
       last_synced_at: null,

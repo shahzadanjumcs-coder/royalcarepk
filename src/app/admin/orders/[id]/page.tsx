@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, useApi, ApiError } from "@/lib/client";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { filterPickupsForCourier } from "@/lib/flaship/protocol";
 import type { Order, OrderItem, OrderStatusHistory, Shipment, ShipmentTracking, CommissionTransaction, OrderStatus } from "@/lib/types";
 import {
   ArrowLeft,
@@ -71,6 +72,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     workers: { id: string; name: string; commission_rate: number }[];
     couriers: { id: string; courier_id: string; name: string }[];
     pickups: { id: string; pickup_id: string; name: string }[];
+    pickup_couriers?: { pickup_id: string; courier_id: string }[];
   }>("/api/lookup");
 
   const [statusNote, setStatusNote] = useState("");
@@ -81,12 +83,34 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [pickup, setPickup] = useState("");
   const [workerId, setWorkerId] = useState("");
 
+  // Only pickup locations actually mapped to the selected courier (Flaship's
+  // merchant_pickup_couriers). Empty mapping data → full list (graceful
+  // degradation until the catalog is synced with the mapping).
+  const availablePickups = useMemo(
+    () => filterPickupsForCourier(lookup?.pickups ?? [], lookup?.pickup_couriers ?? [], courier),
+    [lookup, courier]
+  );
+
   useEffect(() => {
-    if (lookup && !courier) {
-      setCourier(lookup.couriers[0]?.courier_id ?? "");
-      setPickup(lookup.pickups[0]?.pickup_id ?? "");
-    }
-  }, [lookup, courier]);
+    if (!lookup) return;
+    setCourier((cur) => {
+      if (cur) return cur;
+      // Prefer a courier that actually has mapped pickup locations.
+      const links = lookup.pickup_couriers ?? [];
+      const usable = links.length ? new Set(links.map((l) => l.courier_id)) : null;
+      const first = usable ? lookup.couriers.find((c) => usable.has(c.courier_id)) : lookup.couriers[0];
+      return first?.courier_id ?? "";
+    });
+  }, [lookup]);
+
+  // Keep the pickup selection inside the mapped set whenever the courier changes.
+  useEffect(() => {
+    if (!lookup) return;
+    setPickup((cur) => {
+      if (cur && availablePickups.some((p) => p.pickup_id === cur)) return cur;
+      return availablePickups[0]?.pickup_id ?? "";
+    });
+  }, [lookup, availablePickups]);
 
   const run = useCallback(
     async (key: string, fn: () => Promise<string | void>) => {
@@ -259,14 +283,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     </div>
                     <div>
                       <Label className="mb-1 block text-xs">Pickup location</Label>
-                      <Select value={pickup} onValueChange={setPickup}>
+                      <Select value={pickup} onValueChange={setPickup} disabled={availablePickups.length === 0}>
                         <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {(lookup?.pickups ?? []).map((p) => (
+                          {availablePickups.map((p) => (
                             <SelectItem key={p.id} value={p.pickup_id}>{p.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {lookup && availablePickups.length === 0 ? (
+                        <p className="mt-1 text-[11px] text-amber-600">
+                          No pickup location is mapped to this courier — re-sync the Flaship catalog or pick another courier.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 ) : (

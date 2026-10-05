@@ -1,4 +1,5 @@
 import { ok, fail, withAuth, GENERIC_ERROR } from "@/lib/api/helpers";
+import { store } from "@/lib/store";
 import { syncCatalog, listCouriers, listCities, listPickups, getFlashipConfig } from "@/lib/flaship/service";
 import { logAudit } from "@/lib/services/audit";
 
@@ -6,13 +7,29 @@ export const GET = withAuth("any", async (_session, req) => {
   const url = new URL(req.url);
   const type = url.searchParams.get("type");
   if (!type) {
-    const [couriers, cities, pickups] = await Promise.all([listCouriers(), listCities(), listPickups()]);
+    const [couriers, cities, pickups, pickupCouriers] = await Promise.all([
+      listCouriers(),
+      listCities(),
+      listPickups(),
+      store.list<{ pickup_id: string; courier_id: string }>("flaship_pickup_couriers"),
+    ]);
     const cfg = await getFlashipConfig();
-    return ok({ couriers, cities, pickups, mode: cfg.mode, api_key_set: cfg.api_key_set });
+    return ok({
+      couriers,
+      cities,
+      pickups,
+      // pickup↔courier mapping — the booking UI filters pickup locations by it
+      pickup_couriers: pickupCouriers.rows,
+      mode: cfg.mode,
+      api_key_set: cfg.api_key_set,
+      default_courier: cfg.default_courier ?? null,
+      default_pickup: cfg.default_pickup ?? null,
+    });
   }
   if (type === "couriers") return ok({ rows: await listCouriers() });
   if (type === "cities") return ok({ rows: await listCities() });
   if (type === "pickups") return ok({ rows: await listPickups() });
+  if (type === "pickup_couriers") return ok({ rows: (await store.list<{ pickup_id: string; courier_id: string }>("flaship_pickup_couriers")).rows });
   return fail("Unknown catalog type.", 422);
 });
 

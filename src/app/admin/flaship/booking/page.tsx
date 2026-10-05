@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { filterPickupsForCourier } from "@/lib/flaship/protocol";
 import type { Order } from "@/lib/types";
 import { BookOpen, RefreshCw, Send, Loader2, Info } from "lucide-react";
 
@@ -19,8 +20,12 @@ interface CatalogPickup { id: string; pickup_id: string; name: string; address: 
 
 export default function FlashipBookingPage() {
   const [page, setPage] = useState(1);
-  const { data: cfg } = useApi<{ mode: string; api_key_set: boolean }>("/api/flaship/catalog");
-  const { data: catalog } = useApi<{ couriers: CatalogCarrier[]; pickups: CatalogPickup[] }>("/api/flaship/catalog");
+  const { data: cfg } = useApi<{ mode: string; api_key_set: boolean; default_courier: string | null }>("/api/flaship/catalog");
+  const { data: catalog } = useApi<{
+    couriers: CatalogCarrier[];
+    pickups: CatalogPickup[];
+    pickup_couriers?: { pickup_id: string; courier_id: string }[];
+  }>("/api/flaship/catalog");
   const { data, loading, error, refresh } = useList<Order>(
     `/api/orders${buildQuery({ status: "UNBOOKED", approval: "APPROVED", page, perPage: 15 })}`,
     [page]
@@ -32,6 +37,31 @@ export default function FlashipBookingPage() {
   const [pickup, setPickup] = useState("");
 
   const bookable = useMemo(() => (data?.rows ?? []).filter((o) => o.booking_status !== "booked"), [data]);
+
+  // Effective courier: explicit selection, else the settings default.
+  const effectiveCourier = courier || cfg?.default_courier || "";
+  // Only pickups actually mapped to the effective courier (Flaship's
+  // merchant_pickup_couriers). No mapping data → full list (graceful
+  // degradation until the catalog is synced with the mapping).
+  const availablePickups = useMemo(
+    () =>
+      effectiveCourier
+        ? filterPickupsForCourier(catalog?.pickups ?? [], catalog?.pickup_couriers ?? [], effectiveCourier)
+        : catalog?.pickups ?? [],
+    [catalog, effectiveCourier]
+  );
+
+  const onCourierChange = (value: string) => {
+    setCourier(value);
+    // Re-validate the pickup choice against the newly selected courier.
+    const nextEffective = value || cfg?.default_courier || "";
+    const nextAvailable = nextEffective
+      ? filterPickupsForCourier(catalog?.pickups ?? [], catalog?.pickup_couriers ?? [], nextEffective)
+      : catalog?.pickups ?? [];
+    if (pickup && !nextAvailable.some((p) => p.pickup_id === pickup)) {
+      setPickup(""); // fall back to settings default; admin picks explicitly if needed
+    }
+  };
 
   const book = async (order: Order) => {
     setBusyId(order.id);
@@ -114,8 +144,8 @@ export default function FlashipBookingPage() {
         <CardContent className="grid gap-3 px-3 sm:grid-cols-3">
           <div>
             <Label className="mb-1 block text-xs text-muted-foreground">Courier</Label>
-            <select value={courier} onChange={(e) => setCourier(e.target.value)} className="h-9 w-full rounded-md border border-border bg-card px-2 text-sm">
-              <option value="">Default (from settings)</option>
+            <select value={courier} onChange={(e) => onCourierChange(e.target.value)} className="h-9 w-full rounded-md border border-border bg-card px-2 text-sm">
+              <option value="">Default (from settings){cfg?.default_courier ? ` — ${cfg.default_courier}` : ""}</option>
               {(catalog?.couriers ?? []).map((c) => (
                 <option key={c.id} value={c.courier_id}>{c.name}</option>
               ))}
@@ -131,12 +161,22 @@ export default function FlashipBookingPage() {
           </div>
           <div>
             <Label className="mb-1 block text-xs text-muted-foreground">Pickup location</Label>
-            <select value={pickup} onChange={(e) => setPickup(e.target.value)} className="h-9 w-full rounded-md border border-border bg-card px-2 text-sm">
+            <select
+              value={pickup}
+              onChange={(e) => setPickup(e.target.value)}
+              disabled={effectiveCourier !== "" && availablePickups.length === 0}
+              className="h-9 w-full rounded-md border border-border bg-card px-2 text-sm disabled:opacity-50"
+            >
               <option value="">Default (from settings)</option>
-              {(catalog?.pickups ?? []).map((p) => (
+              {availablePickups.map((p) => (
                 <option key={p.id} value={p.pickup_id}>{p.name}{p.address ? ` — ${p.address}` : ""}</option>
               ))}
             </select>
+            {effectiveCourier !== "" && availablePickups.length === 0 ? (
+              <p className="mt-1 text-[11px] text-amber-600">
+                No pickup location is mapped to this courier — re-sync the Flaship catalog or pick another courier.
+              </p>
+            ) : null}
           </div>
         </CardContent>
       </Card>

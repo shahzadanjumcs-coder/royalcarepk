@@ -23,6 +23,7 @@ export type TableName =
   | "flaship_couriers"
   | "flaship_cities"
   | "flaship_pickups"
+  | "flaship_pickup_couriers"
   | "flaship_logs"
   | "inventory_movements"
   | "notifications"

@@ -26,12 +26,16 @@ const {
   DisconnectReason,
 } = baileys;
 
-const pino = require("pino");
 const QRCode = require("qrcode");
 const qrcodeTerminal = require("qrcode-terminal");
 const { updateAccount } = require("./store");
+const { isTransientBaileysError } = require("./lib");
+const { createBotLogger } = require("./logger");
 
-const logger = pino({ level: "error" });
+// Deduped Baileys logger: transient internal errors (e.g. "unexpected error
+// in 'init queries'" with statusCode 408 on slow networks) are non-fatal —
+// the first occurrence is logged, identical repeats collapse for 10 minutes.
+const logger = createBotLogger("error");
 const RECONNECT_BASE_MS = 10 * 1000;
 const RECONNECT_MAX_MS = 5 * 60 * 1000;
 
@@ -153,11 +157,19 @@ class AccountManager {
         return;
       }
 
+      // A transient drop (408 timed out, 428 closed, 515 restart…) never
+      // invalidates the stored session — only loggedOut (401) wipes it.
+      const transient = isTransientBaileysError(lastDisconnect?.error);
       await updateAccount(this.sb, accountId, {
         status: "disconnected",
         last_disconnected_at: new Date().toISOString(),
-        last_error: `Connection closed (code ${statusCode ?? "unknown"}) — will retry.`,
+        last_error: transient
+          ? `Transient WhatsApp network issue (code ${statusCode ?? "unknown"}) — reconnecting automatically; session preserved.`
+          : `Connection closed (code ${statusCode ?? "unknown"}) — will retry.`,
       });
+      console.log(
+        `[bot] account ${accountId} disconnected (code ${statusCode ?? "unknown"}${transient ? ", transient" : ""}) — session files kept, reconnecting with backoff`
+      );
       await this.scheduleReconnect(accountId);
     }
   }
@@ -168,7 +180,9 @@ class AccountManager {
     if (!data || !data.enabled) return;
     const entry = this.socks.get(accountId);
     const attempt = (entry?.reconnectAttempt ?? 0) + 1;
-    const delay = Math.min(RECONNECT_BASE_MS * attempt, RECONNECT_MAX_MS);
+    // exponential backoff + small jitter: 10s, 20s, 40s, 80s … capped at 5min
+    const exponential = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt - 1), RECONNECT_MAX_MS);
+    const delay = Math.round(exponential + Math.random() * 1000);
     console.log(`[bot] reconnecting account ${accountId} in ${Math.round(delay / 1000)}s (attempt ${attempt})`);
     const timer = setTimeout(async () => {
       this.socks.delete(accountId);

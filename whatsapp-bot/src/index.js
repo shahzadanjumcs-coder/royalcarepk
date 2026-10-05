@@ -20,7 +20,7 @@ const { createSupabase, touchBotHeartbeat } = require("./store");
 const { AccountManager } = require("./accounts");
 const { QueueProcessor } = require("./queue");
 const { CommandRunner } = require("./commands");
-const { sleep } = require("./lib");
+const { sleep, isTransientBaileysError } = require("./lib");
 
 const POLL_MS = Number(process.env.WHATSAPP_POLL_MS) || 3000;
 const HEARTBEAT_MS = 15 * 1000;
@@ -31,6 +31,22 @@ const SESSION_DIR = path.resolve(__dirname, "..", process.env.WHATSAPP_SESSION_D
 
 const startedAt = new Date();
 const stats = { commands: 0, sent: 0, failed: 0, lastError: null };
+
+/**
+ * Baileys internals can surface stray async errors (transient 408 timeouts,
+ * dropped frames, …). Node >= 15 turns an unhandled rejection into a hard
+ * exit, which would kill EVERY account plus command/queue polling. Instead:
+ * log, classify and stay alive — dead sockets self-heal via the close →
+ * reconnect loop and reconcile(), and stored sessions are never touched.
+ */
+process.on("unhandledRejection", (reason) => {
+  stats.lastError = reason?.message ?? String(reason);
+  console.error(`[bot] unhandled rejection (kept alive${isTransientBaileysError(reason) ? ", transient" : ""}): ${stats.lastError}`);
+});
+process.on("uncaughtException", (err) => {
+  stats.lastError = err?.message ?? String(err);
+  console.error(`[bot] uncaught exception (kept alive${isTransientBaileysError(err) ? ", transient" : ""}):`, err?.stack ?? err);
+});
 
 async function main() {
   const sb = createSupabase();

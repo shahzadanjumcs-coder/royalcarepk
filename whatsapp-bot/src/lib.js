@@ -74,6 +74,23 @@ function isGroupJid(jid) {
   return /^[0-9]{10,25}(-[0-9]+)?@g\.us$/.test(String(jid ?? ""));
 }
 
+/**
+ * Transient Baileys/WhatsApp network errors that must NEVER take the bot
+ * process down (408 "Timed Out" init queries, dropped sockets, restart
+ * hints, service unavailability). loggedOut (401) is deliberately NOT in
+ * this set — that path wipes the session and needs a fresh QR scan.
+ */
+const TRANSIENT_DISCONNECT_CODES = new Set([408, 411, 428, 440, 500, 502, 503, 515]);
+const TRANSIENT_ERROR_RE =
+  /timed ?out|connection closed|connection lost|stream errored|restart required|service unavailable|connection replaced|multidevice mismatch|conflict|precondition|fetch failed|network|ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up/i;
+
+function isTransientBaileysError(err) {
+  if (!err) return false;
+  const statusCode = err?.output?.statusCode ?? err?.statusCode;
+  if (typeof statusCode === "number" && TRANSIENT_DISCONNECT_CODES.has(statusCode)) return true;
+  return TRANSIENT_ERROR_RE.test(String(err?.message ?? err));
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
@@ -86,5 +103,6 @@ module.exports = {
   computeBackoffMs,
   prefixTestMessage,
   isGroupJid,
+  isTransientBaileysError,
   sleep,
 };

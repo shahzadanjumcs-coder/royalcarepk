@@ -197,18 +197,23 @@ select false, false, 2500, 3
 where not exists (select 1 from whatsapp_bot_settings);
 
 -- Default routing + professional templates (only inserted when missing so
--- admin edits are never overwritten by re-running this migration)
+-- admin edits are never overwritten by re-running this migration).
+-- NOTE: each enum literal MUST be explicitly cast to whatsapp_notification_type.
+-- Inside a "from (values ...) as seed(...)" derived table PostgreSQL resolves
+-- bare string literals to type "text", which would make both the
+-- "r.notification_type = seed.notification_type" comparison and the INSERT
+-- fail with "operator does not exist: whatsapp_notification_type = text".
 insert into whatsapp_routing_settings (notification_type, enabled, template)
 select * from (values
-  ('BOOKED', true,
+  ('BOOKED'::whatsapp_notification_type, true,
 E'Assalam-o-Alaikum {{customer_name}},\nYour order {{order_number}} has been booked successfully.\nCourier: {{courier}}\nTracking/CN: {{cn_number}}\nThank you for choosing RoyalCarePK.'),
-  ('OUT_FOR_DELIVERY', true,
+  ('OUT_FOR_DELIVERY'::whatsapp_notification_type, true,
 E'Assalam-o-Alaikum {{customer_name}},\nYour order {{order_number}} is out for delivery today.\nTracking/CN: {{cn_number}}\nPlease keep your phone available for the rider.'),
-  ('DELIVERED', true,
+  ('DELIVERED'::whatsapp_notification_type, true,
 E'Assalam-o-Alaikum {{customer_name}},\nYour order {{order_number}} has been delivered successfully.\nThank you for choosing RoyalCarePK.'),
-  ('RETURNED', true,
+  ('RETURNED'::whatsapp_notification_type, true,
 E'RoyalCarePK Alert\nOrder {{order_number}} has been returned.\nCustomer: {{customer_name}}\nCN: {{cn_number}}\nReason: {{return_reason}}'),
-  ('SHIPPER_ADVISE', true,
+  ('SHIPPER_ADVISE'::whatsapp_notification_type, true,
 E'RoyalCarePK / Flaship Update\nOrder: {{order_number}}\nCustomer: {{customer_name}}\nCN: {{cn_number}}\nStatus: SHIPPER ADVISE\nReason: {{reason}}')
 ) as seed(notification_type, enabled, template)
 where not exists (

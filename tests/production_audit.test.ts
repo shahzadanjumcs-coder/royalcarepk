@@ -13,6 +13,11 @@
  *   5. pickFields PATCH whitelisting (unknown keys can no longer reach store.update)
  */
 import { describe, it, expect, mock, beforeEach } from "bun:test";
+import {
+  buildFlashipServiceMock,
+  flashipServiceCalls,
+  resetFlashipServiceMock,
+} from "./helpers/flaship_service_mock";
 
 // ---------------- shared mocks ----------------
 
@@ -37,20 +42,10 @@ mock.module("@/lib/services/inventory", () => ({
 }));
 mock.module("@/lib/services/commission", () => ({ processCommissionForStatus: async () => undefined }));
 
-const flashipCalls: { fn: string; args: unknown[] }[] = [];
-class FakeFlashipError extends Error {}
-mock.module("@/lib/flaship/service", () => ({
-  FlashipError: FakeFlashipError,
-  syncOrderTracking: async (...args: unknown[]) => {
-    flashipCalls.push({ fn: "syncOrderTracking", args });
-    return { cn: "FLP1", status: "DELIVERED", changes: [] };
-  },
-  syncCatalog: async () => ({ couriers: 0, cities: 0, pickups: 0, links: 0 }),
-  listCouriers: async () => [],
-  listCities: async () => [],
-  listPickups: async () => [],
-  getFlashipConfig: async () => ({ mode: "live", api_key_set: true }),
-}));
+// Shared service mock (complete surface + shared recorder) — identical in
+// every file that mocks "@/lib/flaship/service", so cross-file registration
+// order can never break named imports (see helpers/flaship_service_mock.ts).
+mock.module("@/lib/flaship/service", () => buildFlashipServiceMock());
 
 const tableRows: Record<string, Record<string, unknown>[]> = {
   orders: [],
@@ -79,7 +74,7 @@ const jsonRes = async (res: Response) => ({ status: res.status, body: await res.
 
 beforeEach(() => {
   mockSession = { role: "super_admin", user_id: "u-admin" };
-  flashipCalls.length = 0;
+  resetFlashipServiceMock();
   insertCalls.length = 0;
   getStore.clear();
 });
@@ -101,14 +96,14 @@ describe("POST /api/orders/[id]/sync role restriction", () => {
   it("allows super_admin to sync", async () => {
     const { status } = await jsonRes(await syncPOST(new Request("http://x", { method: "POST" }), ctxWith("o1")));
     expect(status).toBe(200);
-    expect(flashipCalls).toHaveLength(1);
+    expect(flashipServiceCalls.filter((c) => c.fn === "syncOrderTracking")).toHaveLength(1);
   });
 
   it("forbids workers (403) — no cross-order commission/inventory cascades", async () => {
     mockSession = { role: "worker", user_id: "w1" };
     const { status } = await jsonRes(await syncPOST(new Request("http://x", { method: "POST" }), ctxWith("o1")));
     expect(status).toBe(403);
-    expect(flashipCalls).toHaveLength(0);
+    expect(flashipServiceCalls.filter((c) => c.fn === "syncOrderTracking")).toHaveLength(0);
   });
 
   it("forbids anonymous callers (401)", async () => {

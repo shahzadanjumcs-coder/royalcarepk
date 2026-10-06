@@ -76,6 +76,104 @@ export function buildBookingPayload(input: BookingPayloadInput): Record<string, 
   };
 }
 
+// ---------------- Booking payload (POST /orders — snake_case contract) ----------------
+
+/**
+ * Official /orders create-booking contract. Required keys EXACTLY as Flaship's
+ * validator reports them (DRF snake_case):
+ *   pickup_id, courier_code, service_type, product_name, net_weight,
+ *   cod_amount, consignee_name, consignee_phone_primary, consignee_address,
+ *   consignee_city
+ * Optional best-effort keys sent when available: product_pieces,
+ * special_instruction, external_ref_no.
+ *
+ * Value-fidelity rules (same as the legacy /bookings/ contract):
+ *   - pickup_id / courier_code pass through VERBATIM from the catalog
+ *     (no lowercasing, no numeric coercion).
+ *   - consignee_phone_primary is normalized (+92/92 → 0).
+ */
+export interface FlashipOrderPayloadInput {
+  /** Verbatim catalog pickup location id. */
+  pickupId: string;
+  /** Verbatim catalog courier code (case-sensitive, e.g. "Leopard"). */
+  courierCode: string;
+  /** overnight | overland | detain */
+  serviceType: string;
+  productName: string;
+  /** Weight in kg. */
+  netWeight: number;
+  codAmount: number;
+  consigneeName: string;
+  consigneePhonePrimary: string;
+  consigneeAddress: string;
+  consigneeCity: string;
+  productPieces?: number;
+  specialInstruction?: string;
+  externalRefNo?: string;
+}
+
+/** The exact required-field list Flaship enforces on POST /orders. */
+export const FLASHIP_ORDER_REQUIRED_FIELDS = [
+  "pickup_id",
+  "courier_code",
+  "service_type",
+  "product_name",
+  "net_weight",
+  "cod_amount",
+  "consignee_name",
+  "consignee_phone_primary",
+  "consignee_address",
+  "consignee_city",
+] as const;
+
+/**
+ * Build the POST /orders body (snake_case). Pure function — values come from
+ * the caller (order / customer / items / settings / booking selection).
+ */
+export function buildFlashipOrderPayload(input: FlashipOrderPayloadInput): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    // Value fidelity: NO toLowerCase(), NO parseInt() — Flaship validates the
+    // courier/pickup pair case-sensitively against merchant_pickup_couriers.
+    pickup_id: String(input.pickupId ?? "").trim(),
+    courier_code: String(input.courierCode ?? "").trim(),
+    service_type: String(input.serviceType ?? "").trim() || "overnight",
+    product_name: String(input.productName ?? "").trim() || "Products",
+    net_weight: Number(input.netWeight ?? 0.5) || 0.5,
+    cod_amount: Number(input.codAmount ?? 0) || 0,
+    consignee_name: String(input.consigneeName ?? "").trim(),
+    consignee_phone_primary: normalizePkPhone(input.consigneePhonePrimary ?? ""),
+    consignee_address: String(input.consigneeAddress ?? "").trim(),
+    consignee_city: String(input.consigneeCity ?? "").trim(),
+  };
+  if (input.productPieces !== undefined) {
+    payload.product_pieces = Math.max(1, Number(input.productPieces) || 1);
+  }
+  const instruction = String(input.specialInstruction ?? "").trim();
+  if (instruction) payload.special_instruction = instruction;
+  const externalRef = String(input.externalRefNo ?? "").trim();
+  if (externalRef) payload.external_ref_no = externalRef;
+  return payload;
+}
+
+/**
+ * Server-side completeness gate: returns every required key Flaship would
+ * reject, so the caller can fail BEFORE hitting the API with a useless
+ * request. Empty/whitespace strings and non-finite numbers count as missing;
+ * cod_amount 0 (prepaid) is valid.
+ */
+export function findMissingBookingFields(payload: Record<string, unknown>): string[] {
+  const missing: string[] = [];
+  for (const key of FLASHIP_ORDER_REQUIRED_FIELDS) {
+    const v = payload[key];
+    if (typeof v === "number") {
+      if (!Number.isFinite(v)) missing.push(key);
+    } else if (typeof v !== "string" || !v.trim()) {
+      missing.push(key);
+    }
+  }
+  return missing;
+}
+
 // ---------------- Booking response parsing ----------------
 
 export interface ParsedBooking {

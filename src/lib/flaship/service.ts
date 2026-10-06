@@ -3,9 +3,10 @@ import { store, IS_DEMO_MODE } from "@/lib/store";
 import type { FlashipCourier, FlashipCity, FlashipPickup, Order, OrderItem } from "@/lib/types";
 import { decryptSecret } from "@/lib/crypto/secret-box";
 import {
-  buildBookingPayload,
+  buildFlashipOrderPayload,
   extractApiErrorMessage,
   extractCatalog,
+  findMissingBookingFields,
   isPairMapped,
   parseBookingResponse,
   type ExtractedCatalog,
@@ -20,13 +21,16 @@ export class FlashipError extends Error {}
 /**
  * Flaship Integration API client — server-side only.
  *
- * Technical reference (official Flaship /help spec, Integration API):
+ * Technical reference (Flaship Integration API, re-verified against the live
+ * API validator 2026-10):
  *   GET  {base}/catalog/            → pickupAddress, companies (each carrying its
  *                                     enabled pickup locations), rateCards, cities
- *   POST {base}/bookings/           → camelCase payload (consigneeName…, courierCompany,
- *                                     courierOption, pickuplocation); values sent VERBATIM —
- *                                     Flaship matches the courier/pickup pair case-sensitively
- *                                     against its merchant_pickup_couriers mapping
+ *   POST {base}/orders              → snake_case payload (pickup_id, courier_code,
+ *                                     service_type, product_name, net_weight, cod_amount,
+ *                                     consignee_name, consignee_phone_primary,
+ *                                     consignee_address, consignee_city); values sent
+ *                                     VERBATIM — Flaship matches the courier/pickup pair
+ *                                     case-sensitively against merchant_pickup_couriers
  *   Success: {"success": true, "orderNo": 12345, "trackingId": "FLP123456789"}
  *   GET  {base}/orders/{cn}/tracking/  → tracking + history
  *   Auth: header `X-API-KEY: <integration token>`
@@ -59,7 +63,7 @@ const DEFAULT_CONFIG: FlashipConfig = {
   api_key_set: !!process.env.FLASHIP_API_KEY,
   mode: process.env.FLASHIP_API_KEY ? "live" : "simulator",
   timeout_ms: 30000,
-  endpoints: { catalog: "/catalog/", bookings: "/bookings/", tracking: "/orders/{cn}/tracking/" },
+  endpoints: { catalog: "/catalog/", bookings: "/orders", tracking: "/orders/{cn}/tracking/" },
   default_service_type: "overnight",
   default_weight: 0.5,
 };
@@ -86,10 +90,15 @@ export async function getFlashipConfig(): Promise<FlashipConfig> {
   const dbKey = !!v.api_key_enc;
   const mode: FlashipConfig["mode"] =
     envKey || dbKey ? ((v.mode as FlashipConfig["mode"]) === "simulator" ? "simulator" : "live") : "simulator";
+  const storedEndpoints = { ...(v.endpoints || {}) };
+  // Legacy canonicalization: the /bookings/ path (older camelCase contract) is
+  // rejected by the live API — the correct create-booking endpoint is /orders.
+  // Upgrade our own legacy seed value; keep any custom non-legacy override.
+  if (storedEndpoints.bookings === "/bookings/") storedEndpoints.bookings = DEFAULT_CONFIG.endpoints.bookings;
   return {
     ...DEFAULT_CONFIG,
     ...v,
-    endpoints: { ...DEFAULT_CONFIG.endpoints, ...(v.endpoints || {}) },
+    endpoints: { ...DEFAULT_CONFIG.endpoints, ...storedEndpoints },
     api_key_set: envKey || dbKey,
     mode,
   };
@@ -191,7 +200,7 @@ function simulateBooking(payload: Record<string, unknown>) {
     success: true,
     orderNo: Math.floor(100000 + Math.random() * 899999),
     trackingId: cn,
-    courierCompany: payload.courierCompany,
+    courierCompany: payload.courier_code ?? payload.courierCompany,
     status: "BOOKED",
     message: "Booking created successfully (simulated)",
   });
@@ -446,7 +455,7 @@ export async function testFlashipConnection(): Promise<{ ok: boolean; message: s
   }
 }
 
-// ---------------- Booking (POST /bookings/) ----------------
+// ---------------- Booking (POST /orders) ----------------
 
 export interface BookingResult {
   bookingId: string;
@@ -523,27 +532,40 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
     }
   }
 
+  // ---- completeness gate (fail fast, zero side effects) ----
+  // Build the official /orders payload (snake_case) from REAL order data —
+  // customer, delivery address, city, COD amount, order items, settings and
+  // the courier/pickup selection. NEVER hardcoded. If any field Flaship
+  // requires is missing, abort BEFORE touching booking state or calling the
+  // API, and say exactly which fields are missing.
+  const payload = buildFlashipOrderPayload({
+    pickupId: pickuplocation,
+    courierCode: courierCompany,
+    serviceType: courierOption,
+    productName,
+    netWeight: Number(cfg.default_weight ?? 0.5),
+    codAmount: Number(order.cod_amount ?? 0),
+    consigneeName: customer?.name ?? "",
+    consigneePhonePrimary: customer?.phone ?? "",
+    consigneeAddress: order.delivery_address ?? "",
+    consigneeCity: order.city ?? "",
+    productPieces: pieces,
+    specialInstruction: order.notes ?? "",
+    externalRefNo: order.order_number,
+  });
+  const missing = findMissingBookingFields(payload);
+  if (missing.length) {
+    throw new FlashipError(
+      `Flaship booking payload incomplete — missing required field(s): ${missing.join(", ")}. ` +
+        "Check the order's customer name/phone, delivery address, city, COD amount and the courier/pickup selection before booking."
+    );
+  }
+
   // mark as pending so concurrent clicks don't double-book
   await store.update("orders", orderId, { booking_status: "pending" });
 
   try {
     let result: Record<string, unknown>;
-
-    // Official Integration API payload — 11 camelCase fields, values verbatim
-    // (see protocol.ts; pure + unit-tested).
-    const payload = buildBookingPayload({
-      courierCompany,
-      pickuplocation,
-      courierOption,
-      consigneeName: customer?.name ?? "Customer",
-      consigneePhone1: customer?.phone ?? "",
-      consigneeAddress: order.delivery_address,
-      destinationCity: order.city ?? "",
-      codAmount: Number(order.cod_amount ?? 0),
-      productName,
-      productWeight: Number(cfg.default_weight ?? 0.5),
-      productPieces: pieces,
-    });
 
     if (cfg.mode === "live") {
       result = await liveRequest<Record<string, unknown>>(cfg, cfg.endpoints.bookings, {

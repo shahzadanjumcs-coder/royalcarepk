@@ -15,8 +15,18 @@
  */
 import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { filterPickupsForCourier } from "../src/lib/flaship/protocol";
+import {
+  buildFlashipServiceMock,
+  flashipServiceCalls,
+  flashipServiceStubs,
+  resetFlashipServiceMock,
+} from "./helpers/flaship_service_mock";
 
 // ---------------- mocks (registered BEFORE route imports) ----------------
+// Shared service mock (complete surface + shared recorder) — identical in
+// every file that mocks "@/lib/flaship/service", so cross-file registration
+// order can never break named imports (see helpers/flaship_service_mock.ts).
+mock.module("@/lib/flaship/service", () => buildFlashipServiceMock());
 
 type SessionShape = { role: string; user_id: string } | null;
 let mockSession: SessionShape = { role: "super_admin", user_id: "u-admin" };
@@ -24,26 +34,6 @@ let mockSession: SessionShape = { role: "super_admin", user_id: "u-admin" };
 mock.module("@/lib/auth/session", () => ({
   getSession: async () => mockSession,
 }));
-
-const serviceCalls: { fn: string; args: unknown[] }[] = [];
-mock.module("@/lib/flaship/service", () => ({
-  testFlashipConnection: async (...args: unknown[]) => {
-    serviceCalls.push({ fn: "testFlashipConnection", args });
-    return testConnectionResult;
-  },
-  getFlashipConfig: async () => ({
-    mode: "live",
-    api_key_set: true,
-    default_courier: "Leopard",
-    default_pickup: "PK-9012",
-  }),
-}));
-
-let testConnectionResult: { ok: boolean; message: string; mode: string } = {
-  ok: true,
-  message: "Connected. Catalog loaded: 3 courier(s).",
-  mode: "live",
-};
 
 // Fake store: table → rows, records every list() call for assertions.
 const tableRows: Record<string, Record<string, unknown>[]> = {
@@ -86,9 +76,8 @@ const getReq = () => new Request("http://localhost/api/lookup");
 
 beforeEach(() => {
   mockSession = { role: "super_admin", user_id: "u-admin" };
-  serviceCalls.length = 0;
+  resetFlashipServiceMock();
   listCalls.length = 0;
-  testConnectionResult = { ok: true, message: "Connected. Catalog loaded: 3 courier(s).", mode: "live" };
 });
 
 // ---------------------------------------------------------------
@@ -101,11 +90,11 @@ describe("POST /api/flaship/test", () => {
     expect(body.ok).toBe(true);
     expect(body.message).toContain("Connected");
     expect(body.mode).toBe("live");
-    expect(serviceCalls).toHaveLength(1);
+    expect(flashipServiceCalls.filter((c) => c.fn === "testFlashipConnection")).toHaveLength(1);
   });
 
   it("surfaces a real Flaship failure message with ok:false (no generic masking)", async () => {
-    testConnectionResult = { ok: false, message: "Flaship API error (HTTP 400)", mode: "live" };
+    flashipServiceStubs.testConnection = { ok: false, message: "Flaship API error (HTTP 400)", mode: "live" };
     const { status, body } = await jsonRes(await testRoutePOST(new Request("http://localhost/api/flaship/test", { method: "POST" })));
     expect(status).toBe(200);
     expect(body.ok).toBe(false);

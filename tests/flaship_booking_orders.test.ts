@@ -338,4 +338,52 @@ describe("bookOrderWithFlaship — POST /bookings/ transport contract", () => {
     expect(updateCalls).toHaveLength(0);
     expect(insertCalls.filter((i) => i.table === "shipments")).toHaveLength(0);
   });
+
+  it("sends the company-list pickuplocation reference for the mapped pair (merchant_pickup_couriers.external_ref regression)", async () => {
+    seedHappyPath();
+    // Production failure being fixed: Flaship resolves a booking's pickup_id
+    // through merchant_pickup_couriers — the COMPANY-LIST pickuplocation ids,
+    // not the standalone address-list ids. After a catalog re-sync with the
+    // fixed extractor, the mapped pair's stored id IS the company-list
+    // reference, and booking must send exactly that value.
+    tables.flaship_pickup_couriers = [{ pickup_id: "PK-COMPANY-77", courier_id: "Leopard" }];
+    const result = await bookOrderWithFlaship(
+      { userId: "u-admin", role: "super_admin" } as never,
+      "o1",
+      { courier: "Leopard", pickup: "PK-COMPANY-77" }
+    );
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0].url).toBe("https://partners.flaship.pk/api/integration/bookings/");
+    const body = JSON.parse(String(fetchCalls[0].init.body));
+    expect(body.pickup_id).toBe("PK-COMPANY-77"); // the reference Flaship resolves
+    expect(body.courier_code).toBe("leopard");
+    expect(result.trackingNumber).toBe("FLP123456789"); // booking succeeds → CN returned
+  });
+
+  it("blocks an unmapped pickup/courier pair BEFORE any request when mapping data exists (missing merchant_pickup_couriers row regression)", async () => {
+    seedHappyPath();
+    // Exact production failure mode: Flaship replied
+    // 400 {"pickup_id":"Pickup is not synced to this courier (missing merchant_pickup_couriers.external_ref)."}
+    // because the selected pair has no merchant_pickup_couriers row. With
+    // mapping data synced, the server-side pair guard now rejects that same
+    // pair without calling Flaship — no useless POST, no side effects.
+    tables.flaship_pickup_couriers = [{ pickup_id: "PK-9012", courier_id: "Leopard" }];
+    let error: unknown = null;
+    try {
+      await bookOrderWithFlaship(
+        { userId: "u-admin", role: "super_admin" } as never,
+        "o1",
+        { courier: "Leopard", pickup: "PK-UNMAPPED" }
+      );
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(FlashipError);
+    const message = error instanceof Error ? error.message : "";
+    expect(message).toContain("not enabled for courier");
+    expect(message).toContain("Re-sync the Flaship catalog");
+    expect(fetchCalls).toHaveLength(0); // Flaship never sees the invalid pair
+    expect(updateCalls).toHaveLength(0); // no booking-state writes
+  });
 });

@@ -208,6 +208,55 @@ describe("extractCatalog — pickup↔courier mapping", () => {
     expect(cat.pickups[0]?.pickup_id).toBe("PK9");
     expect(cat.links).toEqual([]);
   });
+
+  it("promotes company-list pickuplocation ids (absent from the address list) to bookable pickups — missing merchant_pickup_couriers.external_ref regression", () => {
+    // Flaship's own docs: the booking-time pickup id must be the
+    // "pickup location ID from company list". A pickup id that only appears
+    // inside companies[] entries is still a real Flaship reference — booking
+    // with anything else fails with "Pickup is not synced to this courier
+    // (missing merchant_pickup_couriers.external_ref)."
+    const raw = {
+      companies: [
+        {
+          code: "Leopard",
+          name: "Leopard",
+          pickups: [{ id: 7001, name: "City Terminal", city: "Karachi" }, 7002],
+        },
+      ],
+      pickupAddress: [{ id: "12", name: "Main Warehouse", address: "Site", city: "Karachi" }],
+    };
+    const cat = extractCatalog(raw);
+    // links use the company-list ids — the references Flaship resolves
+    expect(cat.links).toEqual([
+      { pickup_id: "7001", courier_id: "Leopard" },
+      { pickup_id: "7002", courier_id: "Leopard" },
+    ]);
+    // the standalone address record is kept…
+    expect(cat.pickups.some((p) => p.pickup_id === "12")).toBe(true);
+    // …and company-list-only ids become bookable pickup records (verbatim)
+    const promoted = cat.pickups.filter((p) => p.pickup_id === "7001" || p.pickup_id === "7002");
+    expect(promoted.map((p) => p.pickup_id).sort()).toEqual(["7001", "7002"]);
+    expect(promoted.find((p) => p.pickup_id === "7001")?.name).toBe("City Terminal");
+    expect(promoted.find((p) => p.pickup_id === "7001")?.city).toBe("Karachi");
+    // display-name fallback is the id itself — no value invented
+    expect(promoted.find((p) => p.pickup_id === "7002")?.name).toBe("7002");
+  });
+
+  it("reads external_ref as a company-embedded pickup's booking reference when the entry has no explicit id", () => {
+    // `external_ref` is the exact field name Flaship's validator reports
+    // (merchant_pickup_couriers.external_ref); when a company-embedded entry
+    // carries it instead of id, it IS the booking reference. Read verbatim.
+    const raw = {
+      companies: [
+        { code: "MNP", name: "M&P", pickups: [{ external_ref: 5234, name: "Hub", city: "Lahore" }] },
+      ],
+      pickupAddress: [],
+    };
+    const cat = extractCatalog(raw);
+    expect(cat.links).toEqual([{ pickup_id: "5234", courier_id: "MNP" }]);
+    expect(cat.pickups.map((p) => p.pickup_id)).toEqual(["5234"]);
+    expect(cat.pickups[0]?.name).toBe("Hub");
+  });
 });
 
 // ---------------------------------------------------------------

@@ -15,7 +15,14 @@
  * booking response shape is {"success": true, "orderNo": …, "trackingId": …}.
  * The catalog response carries top-level `couriers` ({code, display_name|name}),
  * `pickups` ({id, name, address, city}) and `operational_cities`; the
- * extractor also tolerates the `companies`/`pickupAddress` aliases. All
+ * extractor also tolerates the `companies`/`pickupAddress` aliases. Pickup
+ * locations embedded inside `companies[]` entries are the merchant_pickup_couriers
+ * projection — the ids Flaship's booking validator resolves — so extractCatalog()
+ * records them as links AND promotes company-list-only ids to bookable pickup
+ * records (verbatim from the catalog; booking with any other pickup id fails
+ * with "Pickup is not synced to this courier (missing
+ * merchant_pickup_couriers.external_ref).").
+ * All
  * identifiers keep their ORIGINAL casing inside our catalog tables — only
  * buildFlashipOrderPayload() applies the plugin's wire transformations.
  *
@@ -284,30 +291,64 @@ function firstString(o: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
-/** Extract pickup ids from a company entry's embedded pickup list (ids or objects). */
-function pickupIdsFromCompanyEntry(o: Record<string, unknown>): string[] {
-  const ids: string[] = [];
+/**
+ * One pickup location as embedded in a company (courier) catalog entry.
+ * Flaship's own docs: the booking-time pickup id must be the
+ * "pickup location ID from company list" — these embedded entries are the
+ * merchant_pickup_couriers projection, and their ids/external_refs are the
+ * references Flaship's booking validator resolves (DRF error on mismatch:
+ * "Pickup is not synced to this courier (missing
+ * merchant_pickup_couriers.external_ref).").
+ */
+interface CompanyPickupEntry {
+  pickup_id: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+}
+
+/**
+ * Extract structured pickup entries from a company entry's embedded pickup
+ * list (bare ids or objects). Id-key probe order: explicit ids first, then
+ * `external_ref`/`external_ref_no` — the field name Flaship's own validator
+ * reports (never fabricated; read verbatim from the entry or not at all).
+ */
+function pickupEntriesFromCompanyEntry(o: Record<string, unknown>): CompanyPickupEntry[] {
+  const out: CompanyPickupEntry[] = [];
+  const push = (e: CompanyPickupEntry) => {
+    if (e.pickup_id && !out.some((x) => x.pickup_id === e.pickup_id)) out.push(e);
+  };
   for (const key of ["pickups", "pickup_locations", "pickupAddress", "pickuplocation", "pickup_ids"]) {
     const list = o[key];
     if (Array.isArray(list)) {
       for (const p of list) {
         if (typeof p === "string" || typeof p === "number") {
           const s = String(p).trim();
-          if (s) ids.push(s);
+          if (s) push({ pickup_id: s, name: "", address: null, city: null });
         } else {
           const po = asObject(p);
           if (po) {
-            const pid = firstString(po, ["id", "pickup_id", "pickuplocation", "pickuplocation_id", "value"]);
-            if (pid) ids.push(pid);
+            const pid = firstString(po, [
+              "id", "pickup_id", "pickuplocation", "pickuplocation_id", "value",
+              "external_ref", "external_ref_no",
+            ]);
+            if (pid) {
+              push({
+                pickup_id: pid,
+                name: firstString(po, ["name", "title", "label"]),
+                address: firstString(po, ["address", "address_line", "full_address"]) || null,
+                city: firstString(po, ["city", "city_name", "cityname"]) || null,
+              });
+            }
           }
         }
       }
     } else {
       const single = firstString(o, [key]);
-      if (single) ids.push(single);
+      if (single) push({ pickup_id: single, name: "", address: null, city: null });
     }
   }
-  return [...new Set(ids)];
+  return out;
 }
 
 /** Extract courier codes a pickup entry declares itself enabled for. */
@@ -364,6 +405,9 @@ export function extractCatalog(payload: unknown): ExtractedCatalog {
     links.push({ pickup_id: pickupId, courier_id: courierId });
   };
 
+  // Company-embedded pickup locations (merchant_pickup_couriers projection).
+  const companyPickups = new Map<string, CompanyPickupEntry>();
+
   // ---- couriers: official `companies` first, legacy `couriers` fallback ----
   const couriers: CatalogCourier[] = [];
   const courierCodeByIdentity = new Map<string, string>(); // lowercase identity → official code
@@ -378,7 +422,13 @@ export function extractCatalog(payload: unknown): ExtractedCatalog {
       if (!code) continue;
       couriers.push({ courier_id: code, name: label, code });
       courierCodeByIdentity.set(code.toLowerCase(), code);
-      for (const pid of pickupIdsFromCompanyEntry(o)) addLink(pid, code);
+      for (const entry of pickupEntriesFromCompanyEntry(o)) {
+        addLink(entry.pickup_id, code);
+        // Remember the company-list entry so it can be promoted to a bookable
+        // pickup record below (Flaship resolves booking pickup ids against
+        // exactly this company-list projection).
+        if (!companyPickups.has(entry.pickup_id)) companyPickups.set(entry.pickup_id, entry);
+      }
     }
   }
 
@@ -405,6 +455,23 @@ export function extractCatalog(payload: unknown): ExtractedCatalog {
         const code = courierCodeByIdentity.get(rawCode.toLowerCase()) ?? rawCode;
         addLink(pickup.pickup_id, code);
       }
+    }
+  }
+
+  // ---- promote company-list-only pickup locations to bookable records ----
+  // A pickup location id that appears ONLY inside company entries is still a
+  // real Flaship reference (it is what bookings resolve against) — the UI must
+  // be able to offer it and the booking must send it. Display name falls back
+  // to the id itself; no value is invented.
+  for (const [pid, entry] of companyPickups) {
+    if (!pickups.some((p) => p.pickup_id === pid)) {
+      pickups.push({
+        pickup_id: pid,
+        name: entry.name || pid,
+        address: entry.address,
+        city: entry.city,
+        contact: null,
+      });
     }
   }
 

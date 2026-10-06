@@ -85,7 +85,13 @@ const { POST: syncPOST } = await import("../src/app/api/orders/[id]/sync/route")
 const { GET: catalogGET } = await import("../src/app/api/flaship/catalog/route");
 const { GET: customersGET } = await import("../src/app/api/customers/route");
 const { pickFields } = await import("../src/lib/api/helpers");
-const ordersService = await import("../src/lib/services/orders");
+// The "?real" query gives this file a fresh, unmocked evaluation of the orders
+// service — same isolation convention as flaship_booking_orders.test.ts. Other
+// suite files mock "@/lib/services/orders" globally with partial fakes (e.g.
+// only changeOrderStatus); bun shares one module registry across files, so a
+// plain import can receive a fake depending on file execution order.
+const REAL_ORDERS_SERVICE = "../src/lib/services/orders?real";
+const ordersService = await import(REAL_ORDERS_SERVICE);
 
 const ctxWith = (id: string) => ({ params: Promise.resolve({ id }) });
 

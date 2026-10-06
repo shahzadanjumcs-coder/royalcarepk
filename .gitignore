@@ -46,7 +46,10 @@ local-*
 *.log
 dev.log
 dev.out.log
-test
+# ignore a root-level scratch "test" file only — a bare "test" token here
+# matched every nested folder named test/ and silently swallowed
+# src/app/api/whatsapp/test/ + whatsapp-bot/test/ from past commits
+/test
 prompt
 
 server.log

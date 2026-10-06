@@ -520,3 +520,164 @@ export interface ReportTable {
   rows: Record<string, string | number | null>[];
   totals?: Record<string, number>;
 }
+
+// ============================================================
+// WhatsApp bot (multi-account WhatsApp Web automation)
+// ============================================================
+
+export type WhatsAppNotificationType =
+  | "BOOKED"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "RETURNED"
+  | "SHIPPER_ADVISE";
+
+export const WHATSAPP_NOTIFICATION_TYPES: WhatsAppNotificationType[] = [
+  "BOOKED",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
+  "RETURNED",
+  "SHIPPER_ADVISE",
+];
+
+export const WHATSAPP_TYPE_LABELS: Record<WhatsAppNotificationType, string> = {
+  BOOKED: "Booked",
+  OUT_FOR_DELIVERY: "Out for Delivery",
+  DELIVERED: "Delivered",
+  RETURNED: "Returned",
+  SHIPPER_ADVISE: "Shipper Advise",
+};
+
+/** Where each notification type is delivered by default. */
+export const WHATSAPP_TYPE_RECIPIENT_KIND: Record<WhatsAppNotificationType, "customer" | "admin" | "group"> = {
+  BOOKED: "customer",
+  OUT_FOR_DELIVERY: "customer",
+  DELIVERED: "customer",
+  RETURNED: "admin",
+  SHIPPER_ADVISE: "group",
+};
+
+export type WhatsAppAccountStatus = "connecting" | "connected" | "disconnected";
+export type WhatsAppMessageStatus = "pending" | "processing" | "sent" | "failed" | "retrying" | "cancelled";
+export type WhatsAppCommandType =
+  | "connect"
+  | "logout"
+  | "remove"
+  | "test_message"
+  | "test_group"
+  | "list_groups"
+  | "status_sync";
+
+export interface WhatsAppAccount {
+  id: string;
+  name: string;
+  phone: string | null;
+  status: WhatsAppAccountStatus;
+  enabled: boolean;
+  is_default: boolean;
+  qr_code: string | null;
+  qr_updated_at: string | null;
+  last_connected_at: string | null;
+  last_disconnected_at: string | null;
+  last_error: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WhatsAppRoutingSetting {
+  id: string;
+  notification_type: WhatsAppNotificationType;
+  account_id: string | null;
+  fallback_account_id: string | null;
+  enabled: boolean;
+  template: string;
+  updated_at: string;
+}
+
+export interface WhatsAppAdminRecipient {
+  id: string;
+  label: string;
+  phone: string;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface WhatsAppGroupSetting {
+  id: string;
+  label: string;
+  group_jid: string;
+  account_id: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WhatsAppBotSettings {
+  id: string;
+  paused: boolean;
+  failover_enabled: boolean;
+  send_delay_ms: number;
+  max_retries: number;
+  last_bot_seen_at: string | null;
+  updated_at: string;
+}
+
+export interface WhatsAppQueueItem {
+  id: string;
+  order_id: string | null;
+  order_number: string | null;
+  notification_type: WhatsAppNotificationType;
+  recipient: string;
+  recipient_kind: "customer" | "admin" | "group";
+  account_id: string | null;
+  account_name: string | null;
+  message: string;
+  status: WhatsAppMessageStatus;
+  retry_count: number;
+  max_retries: number;
+  next_attempt_at: string;
+  failure_reason: string | null;
+  dedupe_key: string;
+  created_at: string;
+  updated_at: string;
+  sent_at: string | null;
+}
+
+export interface WhatsAppMessageLog {
+  id: string;
+  queue_id: string;
+  attempt: number;
+  status: "sent" | "failed";
+  account_id: string | null;
+  error: string | null;
+  created_at: string;
+}
+
+/** Incoming WhatsApp message captured by the local bot (whatsapp_inbox). */
+export interface WhatsAppInboxItem {
+  id: string;
+  account_id: string | null;
+  wa_message_id: string;
+  chat_jid: string;
+  chat_kind: "direct" | "group" | "broadcast";
+  sender_jid: string | null;
+  sender_phone: string | null;
+  sender_name: string | null;
+  body: string | null;
+  message_type: string | null;
+  is_from_me: boolean;
+  wa_timestamp: string | null;
+  created_at: string;
+}
+
+export interface WhatsAppCommand {
+  id: string;
+  account_id: string | null;
+  command: WhatsAppCommandType;
+  payload: Record<string, unknown>;
+  status: "pending" | "processing" | "done" | "failed";
+  result: string | null;
+  created_at: string;
+  processed_at: string | null;
+}

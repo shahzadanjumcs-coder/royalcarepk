@@ -1,0 +1,23 @@
+{
+  "name": "royalcarepk-whatsapp-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RoyalCarePK WhatsApp Web automation bot — multi-account, queue-driven, unofficial (Baileys). Runs on your own always-on machine, NOT on Vercel.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "@whiskeysockets/baileys": "^6.7.8",
+    "dotenv": "^16.4.5",
+    "pino": "^9.4.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

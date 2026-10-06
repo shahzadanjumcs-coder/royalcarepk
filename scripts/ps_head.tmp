@@ -1,0 +1,49 @@
+# ============================================================
+#  RoyalCarePK — Task 32 ONE-PASTE Apply Script
+#  (worker approval workflow + safe deletion + Flaship guard
+#   + approve/reject APIs + migration 0003 file)
+#
+#  Kahan run karein: Windows PowerShell — apne PC par
+#  royalcarepk repo ke andar (folder jisme .git hai).
+#  Sirf YEH EK paste — koi p_1..p_5 files nahi, koi manual
+#  copy nahi, koi SQL nahi.
+# ============================================================
+function Apply-Task32 {
+    $ErrorActionPreference = "Stop"
+    if (-not (Test-Path ".git")) {
+        Write-Host "ERROR: Pehle royalcarepk repo folder mein cd karein (jisme .git ho)." -ForegroundColor Red
+        return
+    }
+
+    Write-Host ""
+    Write-Host "=== STEP 1: STATUS CHECK ===" -ForegroundColor Cyan
+    git status -sb
+    git log --oneline -3
+    Write-Host ""
+
+    Write-Host "=== STEP 2: BACKUP BRANCH ===" -ForegroundColor Cyan
+    if (-not (git branch --list backup/pre-task32)) {
+        git branch backup/pre-task32
+        Write-Host "Backup branch 'backup/pre-task32' ban gayi — aapka current state safe."
+    } else {
+        Write-Host "Backup branch 'backup/pre-task32' pehle se hai."
+    }
+    Write-Host ""
+
+    Write-Host "=== STEP 3: ALREADY-APPLIED CHECK ===" -ForegroundColor Cyan
+    $done = git log --oneline --grep="Add worker order approval workflow and safe worker account deletion" -1
+    if ($done) {
+        Write-Host "Task 32 ALREADY APPLIED hai: $done" -ForegroundColor Green
+        Write-Host "Ab sirf yeh chalana hai:  git push origin main"
+        return
+    }
+    if (-not (git config user.email)) {
+        git config user.email "you@example.com"
+        git config user.name "RoyalCarePK Admin"
+        Write-Host "git identity (local) set kar di."
+    }
+
+    Write-Host ""
+    Write-Host "=== STEP 4: PATCH DECODE + SHA VERIFY ===" -ForegroundColor Cyan
+    try { Add-Type -AssemblyName System.IO.Compression } catch {}
+    $b64 = (@'

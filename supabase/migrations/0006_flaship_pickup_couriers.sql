@@ -1,4 +1,7 @@
--- 0004: Flaship pickup <-> courier mapping.
+-- 0006: Flaship pickup <-> courier mapping.
+--
+-- (Originally drafted as 0004; renumbered to 0006 because the remote main line
+-- already uses 0004_whatsapp_bot.sql and 0005_whatsapp_inbox.sql.)
 --
 -- The official Integration API catalog (GET /catalog/) returns `companies[]`
 -- where every courier entry carries the pickup locations enabled for it

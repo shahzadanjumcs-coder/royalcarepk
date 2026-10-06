@@ -5,6 +5,7 @@ import { reserveForOrder, finalizeForOrder, restoreForOrder, releaseForOrder } f
 import { processCommissionForStatus } from "./commission";
 import { notifyAdmins, notifyWorker } from "./notifications";
 import { logAudit } from "./audit";
+import { enqueueWhatsAppOrderEvent } from "./whatsapp";
 import { isValidPhone } from "@/lib/utils";
 
 export class OrderError extends Error {}
@@ -340,6 +341,13 @@ export async function changeOrderStatus(
     oldData: { status: order.status },
     newData: { status: newStatus, note: note ?? null },
   });
+
+  // WhatsApp notification fan-out (BOOKED -> customer, DELIVERED -> customer,
+  // RETURNED -> admins). Never throws and is idempotent — a repeated event
+  // cannot create a duplicate message. See services/whatsapp.ts.
+  if (newStatus === "BOOKED" || newStatus === "DELIVERED" || newStatus === "RETURNED") {
+    await enqueueWhatsAppOrderEvent({ orderId, type: newStatus });
+  }
 
   return { ...order, status: newStatus };
 }

@@ -620,6 +620,24 @@ put("settings", [
   { id: id("set"), key: "commission", value: { default_rate: 5, deduct_on_return: true, pay_on_delivery_only: true }, updated_at: daysAgoISO(90) },
 ]);
 
+// ---------------- WhatsApp bot (demo mirrors 0004 seeds; sessions live on the bot host) ----------------
+put("whatsapp_accounts", []); // no fake connected numbers in demo — honest empty state
+put("whatsapp_admin_recipients", []);
+put("whatsapp_group_settings", []);
+put("whatsapp_message_queue", []);
+put("whatsapp_message_logs", []);
+put("whatsapp_commands", []);
+put("whatsapp_bot_settings", [
+  { id: id("wabs"), paused: false, failover_enabled: false, send_delay_ms: 2500, max_retries: 3, last_bot_seen_at: null, updated_at: daysAgoISO(0) },
+]);
+put("whatsapp_routing_settings", [
+  { id: id("wart"), notification_type: "BOOKED", account_id: null, fallback_account_id: null, enabled: true, template: "Assalam-o-Alaikum {{customer_name}},\nYour order {{order_number}} has been booked successfully.\nCourier: {{courier}}\nTracking/CN: {{cn_number}}\nThank you for choosing RoyalCarePK.", updated_at: daysAgoISO(0) },
+  { id: id("wart"), notification_type: "OUT_FOR_DELIVERY", account_id: null, fallback_account_id: null, enabled: true, template: "Assalam-o-Alaikum {{customer_name}},\nYour order {{order_number}} is out for delivery today.\nTracking/CN: {{cn_number}}\nPlease keep your phone available for the rider.", updated_at: daysAgoISO(0) },
+  { id: id("wart"), notification_type: "DELIVERED", account_id: null, fallback_account_id: null, enabled: true, template: "Assalam-o-Alaikum {{customer_name}},\nYour order {{order_number}} has been delivered successfully.\nThank you for choosing RoyalCarePK.", updated_at: daysAgoISO(0) },
+  { id: id("wart"), notification_type: "RETURNED", account_id: null, fallback_account_id: null, enabled: true, template: "RoyalCarePK Alert\nOrder {{order_number}} has been returned.\nCustomer: {{customer_name}}\nCN: {{cn_number}}\nReason: {{return_reason}}", updated_at: daysAgoISO(0) },
+  { id: id("wart"), notification_type: "SHIPPER_ADVISE", account_id: null, fallback_account_id: null, enabled: true, template: "RoyalCarePK / Flaship Update\nOrder: {{order_number}}\nCustomer: {{customer_name}}\nCN: {{cn_number}}\nStatus: SHIPPER ADVISE\nReason: {{reason}}", updated_at: daysAgoISO(0) },
+]);
+
 export async function buildSeed(): Promise<Record<string, Row[]>> {
   return db;
 }

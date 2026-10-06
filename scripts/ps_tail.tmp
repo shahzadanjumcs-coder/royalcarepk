@@ -1,0 +1,43 @@
+'@) -replace "\s",""
+    $gzBytes = [Convert]::FromBase64String($b64)
+    $tmpGz   = Join-Path $env:TEMP "task32.patch.gz"
+    [IO.File]::WriteAllBytes($tmpGz, $gzBytes)
+    $fs = [IO.File]::OpenRead($tmpGz)
+    $gz = New-Object System.IO.Compression.GZipStream($fs, [IO.Compression.CompressionMode]::Decompress)
+    $patchFile = "task32-approval-workflow.patch"
+    $fo = [IO.File]::Create((Join-Path (Get-Location).Path $patchFile))
+    $gz.CopyTo($fo)
+    $fo.Dispose(); $gz.Dispose(); $fs.Dispose()
+    Remove-Item $tmpGz -ErrorAction SilentlyContinue
+
+    $sha = (Get-FileHash $patchFile -Algorithm SHA256).Hash.ToLower()
+    $expected = "77365887475752110bfa605cb0166c04e25a128cd74c1d632391ba61cda016df"
+    Write-Host "SHA-256: $sha"
+    if ($sha -ne $expected) {
+        Write-Host "FATAL: Patch corrupt hua (copy-paste mein kuch cut hua hai)." -ForegroundColor Red
+        Write-Host "Yeh chala kar dobara paste karein:  Remove-Item $patchFile"
+        return
+    }
+    Write-Host "Patch verified OK — 119,758 bytes, SHA match." -ForegroundColor Green
+
+    Write-Host ""
+    Write-Host "=== STEP 5: APPLY (git am --3way) ===" -ForegroundColor Cyan
+    if (Test-Path ".git\rebase-apply") { git am --abort }
+    git am --3way $patchFile
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "git am fail hua. Pehle 'git am --abort' chalayein, phir poora output mujhe bhejein." -ForegroundColor Red
+        return
+    }
+
+    Write-Host ""
+    Write-Host "=== DONE: Task 32 project files mein apply ho gaya ===" -ForegroundColor Green
+    git log --oneline -3
+    git show --stat --format="" HEAD | Select-Object -Last 3
+    Write-Host ""
+    Write-Host "NOTE: Migration 0003 aapne Supabase mein PEHLE SE chala di hai." -ForegroundColor Yellow
+    Write-Host "      Yeh script koi SQL NAHI chalati — dobara run karne ka sawal hi nahi."
+    Write-Host ""
+    Write-Host "Ab bas yeh chalayein:  git push origin main" -ForegroundColor Green
+    Write-Host "Push ke baad Vercel khud re-deploy karega (2-3 min)."
+}
+Apply-Task32

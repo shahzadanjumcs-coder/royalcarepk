@@ -34,6 +34,7 @@ interface Overview {
 export default function WhatsAppAdminPage() {
   const { data, refresh } = useApi<Overview>("/api/whatsapp/overview", [], { enabled: true });
   const [tick, setTick] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // refresh the summary periodically (same polling model as the notification bell)
   useEffect(() => {
@@ -46,8 +47,13 @@ export default function WhatsAppAdminPage() {
 
   async function togglePaused() {
     if (!data) return;
-    await api("/api/whatsapp/settings", { method: "PATCH", json: { bot: { paused: !data.paused } } });
-    refresh();
+    setActionError(null);
+    try {
+      await api("/api/whatsapp/settings", { method: "PATCH", json: { bot: { paused: !data.paused } } });
+      refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not update the bot state.");
+    }
   }
 
   const counts = data?.counts;
@@ -66,6 +72,8 @@ export default function WhatsAppAdminPage() {
           ) : null
         }
       />
+
+      {actionError ? <p className="text-sm text-rose-600" role="alert">{actionError}</p> : null}
 
       {/* Status strip */}
       <div className="flex flex-wrap items-center gap-2">

@@ -28,10 +28,10 @@ const EXPECTED_TABLES = [
   "products","inventory_movements","orders","order_items","order_status_history",
   "shipments","shipment_tracking","commission_transactions","commission_rules",
   "worker_payments","flaship_couriers","flaship_cities","flaship_pickups",
-  "flaship_logs","notifications","audit_logs","settings",
+  "flaship_pickup_couriers","flaship_logs","notifications","audit_logs","settings",
   "whatsapp_accounts","whatsapp_routing_settings","whatsapp_admin_recipients",
   "whatsapp_group_settings","whatsapp_bot_settings","whatsapp_message_queue",
-  "whatsapp_message_logs","whatsapp_commands",
+  "whatsapp_message_logs","whatsapp_commands","whatsapp_inbox",
 ];
 
 console.log("=== 1. TABLES (PostgREST OpenAPI) ===");

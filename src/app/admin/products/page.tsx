@@ -2,6 +2,7 @@
 
 import { ResourceManager } from "@/components/app/resource-manager";
 import { useApi } from "@/lib/client";
+import { useSession } from "@/lib/use-session";
 import { Badge } from "@/components/ui/badge";
 import type { Column } from "@/components/app/data-table";
 import { formatCurrency } from "@/lib/utils";
@@ -25,6 +26,10 @@ interface ProductRow {
 }
 
 export default function ProductsPage() {
+  const { session } = useSession();
+  // DELETE /api/products/[id] is admin-only — inventory_manager manages stock,
+  // not the catalog lifetime; hide the destructive control for that role.
+  const canDelete = session?.role === "super_admin" || session?.role === "admin";
   const { data: cats, refresh: refreshCats } = useApi<{ rows: { id: string; name: string }[] }>("/api/categories");
   const { data: sups, refresh: refreshSups } = useApi<{ rows: { id: string; name: string }[] }>("/api/suppliers");
 
@@ -68,6 +73,7 @@ export default function ProductsPage() {
       emptyTitle="No products yet"
       emptyDescription="Add products to start taking orders and tracking stock."
       createLabel="Add product"
+      canDelete={canDelete}
       columns={columns}
       fields={[
         { name: "name", label: "Product name", type: "text", required: true },

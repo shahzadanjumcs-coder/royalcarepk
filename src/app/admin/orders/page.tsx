@@ -37,7 +37,6 @@ function OrdersContent() {
   const approval = params.get("approval") ?? "ALL";
   const [search, setSearch] = useState("");
   const debounced = useDebounced(search);
-  const [preset, setPreset] = useState("all");
   const [range, setRange] = useState<{ preset: string; from?: string; to?: string }>({ preset: "all" });
   const [page, setPage] = useState(1);
 
@@ -51,7 +50,7 @@ function OrdersContent() {
     from: range.preset === "custom" ? range.from : undefined,
     to: range.preset === "custom" ? range.to : undefined,
   });
-  const { data, loading, error, refresh } = useList<Order>(`/api/orders${query}`, [status, approval, debounced, preset, range.from, range.to, page]);
+  const { data, loading, error, refresh } = useList<Order>(`/api/orders${query}`, [status, approval, debounced, range.preset, range.from, range.to, page]);
 
   const columns: Column<Order>[] = useMemo(
     () => [

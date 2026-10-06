@@ -27,6 +27,20 @@ export function sanitizeProfile<T extends object>(profile: T): T {
 }
 
 /**
+ * Whitelist client-supplied PATCH bodies down to known columns before they
+ * reach store.update — an unexpected key would otherwise surface as a
+ * PostgREST PGRST204 "column not found" 500 (raw spreads on teams, customers,
+ * categories, suppliers and commission_rules did exactly that).
+ */
+export function pickFields(body: Record<string, unknown>, allowed: string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in body) out[key] = body[key];
+  }
+  return out;
+}
+
+/**
  * Wraps a route handler with authentication + optional role enforcement.
  */
 export function withAuth(

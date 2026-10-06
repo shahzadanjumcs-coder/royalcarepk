@@ -1,5 +1,6 @@
 import { LayoutDashboard, Package, ShoppingCart, Users, HardHat, Network, PercentCircle, Wallet, Boxes, Tags, Building2, Truck, Radar, BookOpen, BarChart3, Bell, ScrollText, Settings, MapPin, Globe, Handshake, ArrowDownToLine, ArrowUpFromLine, History, ClipboardList, ClipboardCheck, FileSpreadsheet, Landmark, MessageCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { Role } from "@/lib/types";
 
 export interface NavItem {
   label: string;
@@ -12,6 +13,8 @@ export interface NavItem {
 export interface NavSection {
   title: string | null;
   items: NavItem[];
+  /** When set, the section is only shown to these roles (admin sidebar). */
+  roles?: Role[];
 }
 
 export const ADMIN_NAV: NavSection[] = [
@@ -21,6 +24,8 @@ export const ADMIN_NAV: NavSection[] = [
   },
   {
     title: "Orders",
+    // order detail/create pages call /api/lookup, which excludes inventory_manager
+    roles: ["super_admin", "admin"],
     items: [
       { label: "All Orders", href: "/admin/orders", icon: ShoppingCart },
       { label: "Pending Approvals", href: "/admin/orders?approval=PENDING", icon: ClipboardCheck },
@@ -34,6 +39,7 @@ export const ADMIN_NAV: NavSection[] = [
   },
   {
     title: "Team",
+    roles: ["super_admin", "admin"],
     items: [
       { label: "Workers", href: "/admin/workers", icon: HardHat },
       { label: "Teams", href: "/admin/teams", icon: Users },
@@ -44,6 +50,7 @@ export const ADMIN_NAV: NavSection[] = [
   },
   {
     title: "Customers",
+    roles: ["super_admin", "admin"], // customer writes are admin-only
     items: [{ label: "All Customers", href: "/admin/customers", icon: Handshake }],
   },
   {
@@ -61,6 +68,7 @@ export const ADMIN_NAV: NavSection[] = [
   },
   {
     title: "Flaship",
+    roles: ["super_admin", "admin"], // booking/sync/config APIs are admin-only
     items: [
       { label: "Booking", href: "/admin/flaship/booking", icon: BookOpen },
       { label: "Tracking", href: "/admin/flaship/tracking", icon: Radar },
@@ -71,10 +79,12 @@ export const ADMIN_NAV: NavSection[] = [
   },
   {
     title: "WhatsApp",
+    roles: ["super_admin", "admin"],
     items: [{ label: "WhatsApp Bot", href: "/admin/whatsapp", icon: MessageCircle }],
   },
   {
     title: "Accounts",
+    roles: ["super_admin", "admin"],
     items: [
       { label: "Worker Earnings", href: "/admin/accounts/earnings", icon: PercentCircle },
       { label: "Payments", href: "/admin/accounts/payments", icon: Wallet },
@@ -84,6 +94,7 @@ export const ADMIN_NAV: NavSection[] = [
   },
   {
     title: "Insights",
+    roles: ["super_admin", "admin"], // reports + audit logs are admin-only APIs
     items: [
       { label: "Reports", href: "/admin/reports", icon: BarChart3 },
       { label: "Notifications", href: "/admin/notifications", icon: Bell },
@@ -92,6 +103,7 @@ export const ADMIN_NAV: NavSection[] = [
   },
   {
     title: "System",
+    roles: ["super_admin", "admin"],
     items: [{ label: "Settings", href: "/admin/settings", icon: Settings }],
   },
 ];

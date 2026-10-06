@@ -118,8 +118,12 @@ function SettingsContent() {
           value={u.role}
           disabled={u.role === "super_admin"}
           onChange={async (e) => {
-            await api(`/api/users/${u.id}`, { method: "PATCH", json: { role: e.target.value } });
-            refreshUsers();
+            try {
+              await api(`/api/users/${u.id}`, { method: "PATCH", json: { role: e.target.value } });
+              refreshUsers();
+            } catch (err) {
+              setSaveMsg(err instanceof Error ? err.message : "Could not change the role.");
+            }
           }}
         >
           {Object.entries(ROLE_LABELS).map(([v, l]) => (
@@ -142,8 +146,12 @@ function SettingsContent() {
           className={u.status === "active" ? "border-rose-200 text-rose-700 hover:bg-rose-50" : ""}
           disabled={u.role === "super_admin"}
           onClick={async () => {
-            await api(`/api/users/${u.id}`, { method: "PATCH", json: { status: u.status === "active" ? "disabled" : "active" } });
-            refreshUsers();
+            try {
+              await api(`/api/users/${u.id}`, { method: "PATCH", json: { status: u.status === "active" ? "disabled" : "active" } });
+              refreshUsers();
+            } catch (err) {
+              setSaveMsg(err instanceof Error ? err.message : "Could not update the user.");
+            }
           }}
         >
           {u.status === "active" ? "Disable" : "Enable"}
@@ -165,13 +173,21 @@ function SettingsContent() {
           <Button size="sm" variant="outline" onClick={async () => {
             const rate = window.prompt(`New rate for ${r.name} (%)`, String(r.rate));
             if (rate === null) return;
-            await api(`/api/commission/rules/${r.id}`, { method: "PATCH", json: { rate: Number(rate) } });
-            refreshRules();
+            try {
+              await api(`/api/commission/rules/${r.id}`, { method: "PATCH", json: { rate: Number(rate) } });
+              refreshRules();
+            } catch (err) {
+              setSaveMsg(err instanceof Error ? err.message : "Could not update the rate.");
+            }
           }}>Edit rate</Button>
           <Button size="sm" variant="outline" className="border-rose-200 text-rose-700 hover:bg-rose-50" onClick={async () => {
             if (!window.confirm("Delete this rule?")) return;
-            await api(`/api/commission/rules/${r.id}`, { method: "DELETE" });
-            refreshRules();
+            try {
+              await api(`/api/commission/rules/${r.id}`, { method: "DELETE" });
+              refreshRules();
+            } catch (err) {
+              setSaveMsg(err instanceof Error ? err.message : "Could not delete the rule.");
+            }
           }}>Delete</Button>
         </div>
       ),
@@ -467,6 +483,8 @@ function SettingsContent() {
                     });
                     setSaveMsg("General settings saved.");
                     refreshSettings();
+                  } catch (e) {
+                    setSaveMsg(e instanceof Error ? e.message : "Could not save the general settings.");
                   } finally {
                     setSavingGeneral(false);
                   }
@@ -475,7 +493,7 @@ function SettingsContent() {
                 {savingGeneral ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Save general settings
               </Button>
-              {saveMsg ? <p className="text-xs text-emerald-700">{saveMsg}</p> : null}
+              {saveMsg ? <p className={`text-xs ${saveMsg.startsWith("General settings") ? "text-emerald-700" : "text-rose-600"}`}>{saveMsg}</p> : null}
             </CardContent>
           </Card>
         </TabsContent>

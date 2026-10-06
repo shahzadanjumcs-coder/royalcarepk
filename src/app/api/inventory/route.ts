@@ -3,8 +3,8 @@ import { store } from "@/lib/store";
 import { lowStockProducts } from "@/lib/services/inventory";
 import type { Product } from "@/lib/types";
 
-/** Current stock view: products with availability + low-stock flag. */
-export const GET = withAuth(["super_admin", "admin", "inventory_manager", "worker"], async (_session, req) => {
+/** Current stock view: products with availability + low-stock flag. Staff-only (exposes cost data). */
+export const GET = withAuth(["super_admin", "admin", "inventory_manager"], async (_session, req) => {
   const url = new URL(req.url);
   const view = url.searchParams.get("view") || "current";
   if (view === "low") {

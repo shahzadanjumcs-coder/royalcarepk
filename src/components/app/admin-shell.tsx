@@ -79,7 +79,7 @@ function SidebarContent({ role, branding, onNavigate }: { role: Role; branding: 
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto scrollbar-thin px-2.5 py-3" aria-label="Main navigation">
-        {ADMIN_NAV.map((section, i) => (
+        {ADMIN_NAV.filter((section) => !section.roles || section.roles.includes(role)).map((section, i) => (
           <div key={i} className="mb-3">
             {section.title ? (
               <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
@@ -93,7 +93,6 @@ function SidebarContent({ role, branding, onNavigate }: { role: Role; branding: 
             </div>
           </div>
         ))}
-        {role !== "worker" ? null : null}
       </nav>
       <div className="border-t border-sidebar-border px-4 py-3">
         <p className="text-[10px] text-sidebar-foreground/40">{branding.brand_name} v1.0 — Flaship integrated</p>
@@ -119,9 +118,14 @@ export function AdminShell({
   const router = useRouter();
 
   const logout = async () => {
-    await api("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
+    // Navigation must always happen — even if the API call fails, the user
+    // asked to leave; a trapped spinner would be worse than a stale cookie.
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.replace("/login");
+      router.refresh();
+    }
   };
 
   const currentTitle = (() => {

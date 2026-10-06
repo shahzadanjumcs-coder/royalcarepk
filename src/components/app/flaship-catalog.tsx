@@ -18,17 +18,17 @@ interface CatalogProps {
 export function FlashipCatalog({ type, title, description, columns }: CatalogProps) {
   const { data, loading, error, refresh } = useApi<{ rows: Record<string, unknown>[]; mode?: string }>(`/api/flaship/catalog?type=${type}`);
   const [syncing, setSyncing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   const sync = async () => {
     setSyncing(true);
     setMessage(null);
     try {
       const res = await api<{ count: number }>("/api/flaship/catalog", { method: "POST", json: { type } });
-      setMessage(`Synced ${res.count} ${type} from Flaship.`);
+      setMessage({ kind: "ok", text: `Synced ${res.count} ${type} from Flaship.` });
       refresh();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Sync failed.");
+      setMessage({ kind: "err", text: e instanceof Error ? e.message : "Sync failed." });
     } finally {
       setSyncing(false);
     }
@@ -48,7 +48,16 @@ export function FlashipCatalog({ type, title, description, columns }: CatalogPro
       />
 
       {message ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</div>
+        <div
+          className={
+            message.kind === "ok"
+              ? "rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+              : "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+          }
+          role="status"
+        >
+          {message.text}
+        </div>
       ) : null}
       {error ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>

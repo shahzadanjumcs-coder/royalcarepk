@@ -34,6 +34,7 @@ export default function AssignmentsPage() {
         createLabel="Assign worker"
         canDelete
         canEdit={false}
+        canCreate={false}
         columns={[
           { key: "user_name", header: "Worker", render: (a) => (
             <div>

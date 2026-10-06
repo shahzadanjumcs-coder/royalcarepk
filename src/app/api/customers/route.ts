@@ -5,7 +5,10 @@ import { isValidPhone } from "@/lib/utils";
 import { logAudit } from "@/lib/services/audit";
 import type { Customer } from "@/lib/types";
 
-export const GET = withAuth("any", async (session, req) => {
+// Staff-only: returns FULL customer rows (email, notes, address). The worker
+// order form must use /api/lookup, whose worker branch returns only the
+// name/phone/city/address subset (see lookup/route.ts).
+export const GET = withAuth(["super_admin", "admin", "inventory_manager"], async (session, req) => {
   const url = new URL(req.url);
   const opts = parseListParams(url, "created_at", ["name", "phone", "email", "city"]);
   const { rows, total } = await store.list<Customer>("customers", opts);

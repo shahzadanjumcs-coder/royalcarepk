@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useApi } from "@/lib/client";
+import { useSession } from "@/lib/use-session";
 import { PageHeader, ErrorState, PageSpinner } from "@/components/app/states";
 import { StatCard } from "@/components/app/stat-card";
 import { RangeFilter } from "@/components/app/filters";
@@ -46,6 +47,9 @@ interface PendingOrder extends Omit<Order, "items"> {
 
 /** Live list of worker orders waiting for approval with inline actions. */
 function PendingApprovalsCard() {
+  const { session } = useSession();
+  // Approve/Reject are admin-only APIs — inventory_manager sees the queue read-only.
+  const canApprove = session?.role === "super_admin" || session?.role === "admin";
   const { data, loading, error, refresh } = useApi<{ rows: PendingOrder[]; total: number }>(
     "/api/orders?approval=PENDING&include_items=1&perPage=5"
   );
@@ -98,11 +102,13 @@ function PendingApprovalsCard() {
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <span className="text-sm font-bold">{formatCurrency(o.cod_amount)}</span>
-                  <ApprovalActions
-                    orderId={o.id}
-                    orderNumber={o.order_number}
-                    onDone={() => refresh()}
-                  />
+                  {canApprove ? (
+                    <ApprovalActions
+                      orderId={o.id}
+                      orderNumber={o.order_number}
+                      onDone={() => refresh()}
+                    />
+                  ) : null}
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useApi, api } from "@/lib/client";
 import { PageHeader } from "@/components/app/states";
 import { Button } from "@/components/ui/button";
@@ -33,15 +34,26 @@ const TYPE_STYLE: Record<string, string> = {
 
 export default function WorkerNotificationsPage() {
   const { data, loading, error, refresh } = useApi<{ rows: NotificationItem[]; unread: number }>("/api/notifications?limit=50");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const markAll = async () => {
-    await api("/api/notifications", { method: "POST", json: { all: true } });
-    refresh();
+    setActionError(null);
+    try {
+      await api("/api/notifications", { method: "POST", json: { all: true } });
+      refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not mark notifications as read.");
+    }
   };
 
   const markOne = async (id: string) => {
-    await api("/api/notifications", { method: "POST", json: { id } });
-    refresh();
+    setActionError(null);
+    try {
+      await api("/api/notifications", { method: "POST", json: { id } });
+      refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not mark the notification as read.");
+    }
   };
 
   return (
@@ -55,6 +67,8 @@ export default function WorkerNotificationsPage() {
           </Button>
         }
       />
+
+      {actionError ? <p className="text-sm text-rose-600" role="alert">{actionError}</p> : null}
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {loading ? (

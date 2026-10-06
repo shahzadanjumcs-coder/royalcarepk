@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useList, buildQuery, usePagination } from "@/lib/client";
+import { useList, buildQuery, usePagination, useDebounced } from "@/lib/client";
 import { PageHeader } from "@/components/app/states";
 import { DataTable, type Column } from "@/components/app/data-table";
 import { SearchInput } from "@/components/app/filters";
@@ -14,16 +14,13 @@ const ENTITIES = ["ALL", "auth", "profiles", "orders", "customers", "products", 
 
 export default function AuditLogsPage() {
   const [search, setSearch] = useState("");
+  const debounced = useDebounced(search);
   const [entity, setEntity] = useState("ALL");
   const { page, setPage } = usePagination(20);
   const { data, loading, error, refresh } = useList<AuditLog>(
-    `/api/audit-logs${buildQuery({ search: debouncedSafe(search), page, perPage: 20, f_entity: entity === "ALL" ? undefined : entity })}`,
-    [search, entity, page]
+    `/api/audit-logs${buildQuery({ search: debounced, page, perPage: 20, f_entity: entity === "ALL" ? undefined : entity })}`,
+    [debounced, entity, page]
   );
-
-  function debouncedSafe(v: string) {
-    return v;
-  }
 
   const columns: Column<AuditLog>[] = [
     { key: "created_at", header: "When", render: (l) => <span className="whitespace-nowrap text-xs">{formatDateTime(l.created_at)}</span> },

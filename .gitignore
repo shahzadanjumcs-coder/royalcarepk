@@ -64,3 +64,4 @@ server.log
 
 # demo data store
 /data/
+public/*.bundle

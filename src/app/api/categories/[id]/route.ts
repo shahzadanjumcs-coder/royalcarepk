@@ -1,4 +1,4 @@
-import { ok, fail, withAuth, GENERIC_ERROR } from "@/lib/api/helpers";
+import { ok, fail, withAuth, GENERIC_ERROR, pickFields } from "@/lib/api/helpers";
 import { store } from "@/lib/store";
 import { logAudit } from "@/lib/services/audit";
 
@@ -7,7 +7,7 @@ type Ctx = { params: Promise<{ id: string }> };
 export const PATCH = withAuth(["super_admin", "admin", "inventory_manager"], async (session, req, ctx) => {
   try {
     const { id } = await (ctx as unknown as Ctx).params;
-    const body = (await req.json()) as Record<string, unknown>;
+    const body = pickFields((await req.json()) as Record<string, unknown>, ["name", "description", "status"]);
     const cat = await store.get("categories", id);
     if (!cat) return fail("Category not found.", 404);
     await store.update("categories", id, body);

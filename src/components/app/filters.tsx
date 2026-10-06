@@ -34,13 +34,13 @@ export function RangeFilter({
   return (
     <div className={cn("flex flex-wrap items-center gap-2 no-print", className)}>
       <div className="flex flex-wrap gap-1">
-        {PRESETS.slice(0, 6).map((p) => (
+        {PRESETS.map((p) => (
           <Button
             key={p.value}
             size="sm"
             variant={value.preset === p.value ? "default" : "outline"}
             className="h-8 rounded-full px-3 text-xs"
-            onClick={() => onChange({ preset: p.value })}
+            onClick={() => onChange({ preset: p.value, ...(p.value === "custom" ? { from: value.from, to: value.to } : {}) })}
           >
             {p.label}
           </Button>

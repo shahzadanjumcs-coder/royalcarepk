@@ -156,7 +156,11 @@ export async function createOrder(session: Actor, input: CreateOrderInput): Prom
     subtotal,
     discount: input.discount,
     total,
-    cod_amount: input.cod_amount ?? total,
+    // COD = commission base (commission.ts derives commission from cod_amount).
+    // Worker submissions NEVER trust the client's cod_amount — it is pinned to
+    // the server-computed catalogue total, exactly like unit prices/discount.
+    // Admins may still set an explicit COD amount (their own field in the form).
+    cod_amount: isWorkerSubmission ? total : (input.cod_amount ?? total),
     delivery_address: input.delivery_address.trim(),
     city: input.city.trim(),
     notes: input.notes || null,
@@ -396,6 +400,12 @@ export async function approveOrder(session: Actor, orderId: string): Promise<Ord
   if (approval === "APPROVED") return order; // idempotent — safe to call again
   if (approval === "REJECTED") {
     throw new OrderError("This order was rejected and cannot be approved.");
+  }
+  // A PENDING-approval order can still be CANCELLED (cancel releases stock
+  // without touching approval_status). Approving a cancelled order would
+  // resurrect it into an inconsistent state — block it explicitly.
+  if (order.status === "CANCELLED") {
+    throw new OrderError("This order was cancelled and cannot be approved.");
   }
 
   const now = new Date().toISOString();

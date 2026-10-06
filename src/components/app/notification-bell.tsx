@@ -57,13 +57,22 @@ export function NotificationBell({ role }: { role: string }) {
   }, []);
 
   const markAll = async () => {
-    await api("/api/notifications", { method: "POST", json: { all: true } });
-    void load();
+    try {
+      await api("/api/notifications", { method: "POST", json: { all: true } });
+      void load();
+    } catch (e) {
+      // bell has no text surface — log; the next poll refreshes the unread badge
+      console.error("[bell] mark-all failed", e);
+    }
   };
 
   const markOne = async (id: string) => {
-    await api("/api/notifications", { method: "POST", json: { id } });
-    void load();
+    try {
+      await api("/api/notifications", { method: "POST", json: { id } });
+      void load();
+    } catch (e) {
+      console.error("[bell] mark-one failed", e);
+    }
   };
 
   const base = role === "worker" ? "/worker" : "/admin";

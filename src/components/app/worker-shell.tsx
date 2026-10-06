@@ -29,9 +29,13 @@ export function WorkerShell({
   const router = useRouter();
 
   const logout = async () => {
-    await api("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
+    // Navigation must always happen — even if the API call fails.
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.replace("/login");
+      router.refresh();
+    }
   };
 
   const isActive = (href: string, exact?: boolean) =>

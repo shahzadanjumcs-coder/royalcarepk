@@ -4,7 +4,9 @@ import { z } from "zod";
 import { logAudit } from "@/lib/services/audit";
 import type { Product } from "@/lib/types";
 
-export const GET = withAuth(["super_admin", "admin", "inventory_manager", "worker"], async (_session, req) => {
+// Staff-only: rows include COST data (purchase_price, stock_value). The worker
+// order form must use /api/lookup, whose worker branch strips cost fields.
+export const GET = withAuth(["super_admin", "admin", "inventory_manager"], async (_session, req) => {
   const url = new URL(req.url);
   const opts = parseListParams(url, "created_at", ["name", "sku", "barcode"]);
   const { rows, total } = await store.list<Product>("products", opts);

@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useApi, api } from "@/lib/client";
 import { PageHeader, PageSpinner, ErrorState } from "@/components/app/states";
@@ -27,20 +26,19 @@ export default function WorkerProfilePage() {
     };
   }>("/api/worker/summary");
 
-  useEffect(() => {
-    // keep session fresh on visit
-    void fetch("/api/auth/session").catch(() => undefined);
-  }, []);
-
   if (loading) return <PageSpinner />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   if (!data) return null;
   const w = data.worker;
 
   const logout = async () => {
-    await api("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
+    // Navigation must always happen — even if the API call fails.
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.replace("/login");
+      router.refresh();
+    }
   };
 
   const row = (label: string, value: string) => (

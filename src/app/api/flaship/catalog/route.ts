@@ -3,7 +3,9 @@ import { store } from "@/lib/store";
 import { syncCatalog, listCouriers, listCities, listPickups, getFlashipConfig } from "@/lib/flaship/service";
 import { logAudit } from "@/lib/services/audit";
 
-export const GET = withAuth("any", async (_session, req) => {
+// Staff-only: exposes Flaship configuration (mode, defaults) which workers
+// must not see — the documented contract of the /api/lookup worker branch.
+export const GET = withAuth(["super_admin", "admin"], async (_session, req) => {
   const url = new URL(req.url);
   const type = url.searchParams.get("type");
   if (!type) {

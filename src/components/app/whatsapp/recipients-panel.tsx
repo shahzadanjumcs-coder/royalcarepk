@@ -43,13 +43,21 @@ function AdminRecipientsCard() {
   }
 
   async function toggle(r: WhatsAppAdminRecipient) {
-    await api("/api/whatsapp/recipients", { method: "PATCH", json: { id: r.id, enabled: !r.enabled } });
-    refresh();
+    try {
+      await api("/api/whatsapp/recipients", { method: "PATCH", json: { id: r.id, enabled: !r.enabled } });
+      refresh();
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof ApiError ? e.message : "Could not update the recipient." });
+    }
   }
 
   async function remove(id: string) {
-    await api(`/api/whatsapp/recipients?id=${id}`, { method: "DELETE" });
-    refresh();
+    try {
+      await api(`/api/whatsapp/recipients?id=${id}`, { method: "DELETE" });
+      refresh();
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof ApiError ? e.message : "Could not remove the recipient." });
+    }
   }
 
   return (
@@ -178,13 +186,21 @@ function GroupsCard() {
   }
 
   async function toggle(g: WhatsAppGroupSetting) {
-    await api("/api/whatsapp/groups", { method: "PATCH", json: { id: g.id, enabled: !g.enabled } });
-    refresh();
+    try {
+      await api("/api/whatsapp/groups", { method: "PATCH", json: { id: g.id, enabled: !g.enabled } });
+      refresh();
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof ApiError ? e.message : "Could not update the group." });
+    }
   }
 
   async function remove(id: string) {
-    await api(`/api/whatsapp/groups?id=${id}`, { method: "DELETE" });
-    refresh();
+    try {
+      await api(`/api/whatsapp/groups?id=${id}`, { method: "DELETE" });
+      refresh();
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof ApiError ? e.message : "Could not remove the group." });
+    }
   }
 
   return (

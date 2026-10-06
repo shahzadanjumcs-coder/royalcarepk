@@ -1,6 +1,7 @@
 "use client";
 
 import { ResourceManager } from "@/components/app/resource-manager";
+import { useSession } from "@/lib/use-session";
 import type { Column } from "@/components/app/data-table";
 
 interface SupplierRow {
@@ -15,8 +16,12 @@ interface SupplierRow {
 }
 
 export default function SuppliersPage() {
+  const { session } = useSession();
+  // DELETE here is admin-only — hide the destructive control from inventory_manager.
+  const canDelete = session?.role === "super_admin" || session?.role === "admin";
   return (
     <ResourceManager<SupplierRow>
+      canDelete={canDelete}
       title="Suppliers"
       description="Vendors you purchase stock from"
       endpoint="/api/suppliers"

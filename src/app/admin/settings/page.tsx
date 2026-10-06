@@ -401,8 +401,9 @@ function SettingsContent() {
                   onClick={async () => {
                     setSaveMsg(null);
                     try {
-                      const res = await api<{ count: number }>("/api/flaship/catalog", { method: "POST", json: { type: "all" } });
-                      setSaveMsg(`Catalog refreshed: ${res.count} entr${res.count === 1 ? "y" : "ies"} synced (couriers, cities, pickups).`);
+                      const res = await api<{ count: number; counts?: { links?: number } }>("/api/flaship/catalog", { method: "POST", json: { type: "all" } });
+                      const links = res.counts?.links ?? 0;
+                      setSaveMsg(`Catalog refreshed: ${res.count} entr${res.count === 1 ? "y" : "ies"} synced (couriers, cities, pickups) · ${links} courier-pickup pair${links === 1 ? "" : "s"} mapped.`);
                     } catch (e) {
                       setSaveMsg(e instanceof Error ? e.message : "Catalog refresh failed.");
                     }

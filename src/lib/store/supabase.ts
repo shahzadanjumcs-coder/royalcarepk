@@ -20,6 +20,11 @@ const DEFAULT_ORDER_COLUMN: Partial<Record<TableName, string>> = {
   flaship_couriers: "synced_at",
   flaship_cities: "synced_at",
   flaship_pickups: "synced_at",
+  // 0006 table (pickup↔courier mapping): has synced_at but NO created_at — the
+  // default created_at order made every un-ordered list() on it crash with
+  // "column flaship_pickup_couriers.created_at does not exist", which 500'd
+  // GET /api/lookup and GET /api/flaship/catalog (empty booking dropdowns).
+  flaship_pickup_couriers: "synced_at",
   team_members: "joined_at",
   order_items: "id",
   shipment_tracking: "scanned_at",

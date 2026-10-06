@@ -21,16 +21,16 @@ export class FlashipError extends Error {}
 /**
  * Flaship Integration API client — server-side only.
  *
- * Technical reference (Flaship Integration API, re-verified against the live
- * API validator 2026-10):
- *   GET  {base}/catalog/            → pickupAddress, companies (each carrying its
- *                                     enabled pickup locations), rateCards, cities
- *   POST {base}/orders              → snake_case payload (pickup_id, courier_code,
+ * Technical reference — OFFICIAL Flaship WooCommerce plugin (the vendor's own
+ * production client, attached by the merchant 2026-10):
+ *   GET  {base}/catalog/            → couriers, pickups, operational_cities
+ *   POST {base}/bookings/           → snake_case payload (pickup_id, courier_code,
  *                                     service_type, product_name, net_weight, cod_amount,
  *                                     consignee_name, consignee_phone_primary,
- *                                     consignee_address, consignee_city); values sent
- *                                     VERBATIM — Flaship matches the courier/pickup pair
- *                                     case-sensitively against merchant_pickup_couriers
+ *                                     consignee_address, consignee_city) — booking is
+ *                                     created at /bookings/ ONLY; the /orders/ prefix is
+ *                                     used exclusively by tracking
+ *                                     (GET /orders/{cn}/tracking/)
  *   Success: {"success": true, "orderNo": 12345, "trackingId": "FLP123456789"}
  *   GET  {base}/orders/{cn}/tracking/  → tracking + history
  *   Auth: header `X-API-KEY: <integration token>`
@@ -63,7 +63,7 @@ const DEFAULT_CONFIG: FlashipConfig = {
   api_key_set: !!process.env.FLASHIP_API_KEY,
   mode: process.env.FLASHIP_API_KEY ? "live" : "simulator",
   timeout_ms: 30000,
-  endpoints: { catalog: "/catalog/", bookings: "/orders", tracking: "/orders/{cn}/tracking/" },
+  endpoints: { catalog: "/catalog/", bookings: "/bookings/", tracking: "/orders/{cn}/tracking/" },
   default_service_type: "overnight",
   default_weight: 0.5,
 };
@@ -91,10 +91,17 @@ export async function getFlashipConfig(): Promise<FlashipConfig> {
   const mode: FlashipConfig["mode"] =
     envKey || dbKey ? ((v.mode as FlashipConfig["mode"]) === "simulator" ? "simulator" : "live") : "simulator";
   const storedEndpoints = { ...(v.endpoints || {}) };
-  // Legacy canonicalization: the /bookings/ path (older camelCase contract) is
-  // rejected by the live API — the correct create-booking endpoint is /orders.
-  // Upgrade our own legacy seed value; keep any custom non-legacy override.
-  if (storedEndpoints.bookings === "/bookings/") storedEndpoints.bookings = DEFAULT_CONFIG.endpoints.bookings;
+  // Endpoint healing: the official Flaship WooCommerce plugin creates bookings
+  // at POST {base}bookings/ (base ends with /api/integration/) — /orders is
+  // tracking-only. Our own 2026-10 hotfix briefly defaulted bookings to
+  // "/orders" (and rewrote the correct stored "/bookings/" to "/orders"),
+  // which does NOT match the vendor client. Heal any stored "/orders" back to
+  // the official "/bookings/"; the correct stored "/bookings/" passes through
+  // untouched. Same-path variants without the trailing slash are normalized
+  // so Django's APPEND_SLASH redirect can never turn the POST into a GET.
+  if (storedEndpoints.bookings === "/orders" || storedEndpoints.bookings === "/orders/" || storedEndpoints.bookings === "/bookings") {
+    storedEndpoints.bookings = DEFAULT_CONFIG.endpoints.bookings;
+  }
   return {
     ...DEFAULT_CONFIG,
     ...v,
@@ -455,7 +462,7 @@ export async function testFlashipConnection(): Promise<{ ok: boolean; message: s
   }
 }
 
-// ---------------- Booking (POST /orders) ----------------
+// ---------------- Booking (POST /bookings/ — official create-booking endpoint) ----------------
 
 export interface BookingResult {
   bookingId: string;
@@ -533,11 +540,11 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
   }
 
   // ---- completeness gate (fail fast, zero side effects) ----
-  // Build the official /orders payload (snake_case) from REAL order data —
-  // customer, delivery address, city, COD amount, order items, settings and
-  // the courier/pickup selection. NEVER hardcoded. If any field Flaship
-  // requires is missing, abort BEFORE touching booking state or calling the
-  // API, and say exactly which fields are missing.
+  // Build the official /bookings/ payload (snake_case, plugin-identical) from
+  // REAL order data — customer, delivery address, city, COD amount, order
+  // items, settings and the courier/pickup selection. NEVER hardcoded. If any
+  // field Flaship requires is missing, abort BEFORE touching booking state or
+  // calling the API, and say exactly which fields are missing.
   const payload = buildFlashipOrderPayload({
     pickupId: pickuplocation,
     courierCode: courierCompany,

@@ -1,25 +1,23 @@
 /**
  * Flaship Integration API protocol helpers — PURE functions, no I/O.
  *
- * Technical reference (official Flaship /help page, re-verified 2026-10):
- *   POST {base}/bookings/  required fields (camelCase, verbatim values):
- *     consigneeName, consigneePhone1, consigneeAddress, destinationCity,
- *     codAmount, productName, productWeight, productPieces,
- *     courierCompany (e.g. "Leopard", "TCS", "MNP" — case-sensitive),
- *     courierOption (overnight | overland | detain),
- *     pickuplocation — "pickup location ID from company list"
- *   Success response: {"success": true, "orderNo": 12345, "trackingId": "FLP123456789"}
- *   GET {base}/catalog/ returns `pickupAddress`, `companies`, `rateCards` and
- *   operational cities. Each `companies[]` entry carries the pickup locations
- *   enabled for that courier — the booking `pickuplocation` MUST come from that
- *   list, otherwise Flaship rejects the pair:
- *     {"pickup_id":"Pickup is not synced to this courier
- *       (missing merchant_pickup_couriers.external_ref)."}
+ * Technical reference — official Flaship WooCommerce plugin (the vendor's own
+ * production client, attached by the merchant 2026-10):
+ *   DOCUMENTATION.txt:  Integration API endpoints used:
+ *     GET  {base}/catalog/
+ *     POST {base}/bookings/
+ *     GET  {base}/orders/{tracking_number}/tracking/
+ *   Auth: header `X-API-KEY: <per-business Integration API token>`
+ *   Base URL "must end with /api/integration/".
  *
- * IMPORTANT value-fidelity rules (root causes of past production 400s):
- *   - courierCompany is sent EXACTLY as returned by the catalog (no lowercasing).
- *   - pickuplocation is sent EXACTLY as returned by the catalog (no parseInt /
- *     numeric coercion — IDs are opaque strings).
+ * The create-booking payload is snake_case (pickup_id, courier_code, …);
+ * the plugin lowercases courier codes and casts pickup ids to int. The
+ * booking response shape is {"success": true, "orderNo": …, "trackingId": …}.
+ * The catalog response carries top-level `couriers` ({code, display_name|name}),
+ * `pickups` ({id, name, address, city}) and `operational_cities`; the
+ * extractor also tolerates the `companies`/`pickupAddress` aliases. All
+ * identifiers keep their ORIGINAL casing inside our catalog tables — only
+ * buildFlashipOrderPayload() applies the plugin's wire transformations.
  *
  * This module is imported by server code AND unit tests; it must stay free of
  * side effects, filesystem, database and "server-only" imports.
@@ -35,7 +33,7 @@ export function normalizePkPhone(phone: string): string {
   return cleaned;
 }
 
-// ---------------- Booking payload (POST /bookings/) ----------------
+// ---------------- Booking payload (legacy /bookings/ camelCase — retired) ----------------
 
 export interface BookingPayloadInput {
   /** Verbatim catalog courier identity — case-sensitive (e.g. "Leopard"). */
@@ -76,28 +74,43 @@ export function buildBookingPayload(input: BookingPayloadInput): Record<string, 
   };
 }
 
-// ---------------- Booking payload (POST /orders — snake_case contract) ----------------
+// ---------------- Booking payload (POST /bookings/ — snake_case contract) ----------------
 
 /**
- * Official /orders create-booking contract. Required keys EXACTLY as Flaship's
- * validator reports them (DRF snake_case):
+ * OFFICIAL create-booking contract, verified against the official Flaship
+ * WooCommerce plugin (the vendor's own production client):
+ *   DOCUMENTATION.txt:   "POST {base}/bookings/"  (base URL ends with /api/integration/)
+ *   class-flaship-woocommerce-api.php::create_booking() → wp_remote_post($base . 'bookings/')
+ *   class-flaship-woocommerce-admin.php::process_bookings() → payload:
+ *     pickup_id (int), courier_code (strtolower), service_type (strtolower),
+ *     product_name, net_weight, pieces, cod_amount, consignee_name,
+ *     consignee_phone_primary, consignee_phone_secondary (''), consignee_address,
+ *     consignee_city, special_instruction, external_ref_no
+ * `/orders` is NOT a create-booking endpoint — the plugin only ever uses
+ * `/orders/{tracking_number}/tracking/` (GET) under the /orders/ prefix.
+ *
+ * Required keys EXACTLY as Flaship's validator reports them (DRF snake_case):
  *   pickup_id, courier_code, service_type, product_name, net_weight,
  *   cod_amount, consignee_name, consignee_phone_primary, consignee_address,
  *   consignee_city
- * Optional best-effort keys sent when available: product_pieces,
+ * Optional keys sent when available (same names as the plugin): pieces,
  * special_instruction, external_ref_no.
  *
- * Value-fidelity rules (same as the legacy /bookings/ contract):
- *   - pickup_id / courier_code pass through VERBATIM from the catalog
- *     (no lowercasing, no numeric coercion).
- *   - consignee_phone_primary is normalized (+92/92 → 0).
+ * Value-fidelity rules (mirroring the plugin exactly):
+ *   - courier_code / service_type are LOWERCASED (plugin: strtolower() on the
+ *     catalog `code` both at render and submit time).
+ *   - pickup_id passes through VERBATIM (the plugin casts to int; DRF's
+ *     IntegerField coerces the numeric string identically, so we never
+ *     coerce/parse catalog ids ourselves).
+ *   - consignee_phone_primary is normalized (+92/92 → 0), plugin-identical.
+ *   - consignee_phone_secondary is sent as "" exactly like the plugin.
  */
 export interface FlashipOrderPayloadInput {
   /** Verbatim catalog pickup location id. */
   pickupId: string;
-  /** Verbatim catalog courier code (case-sensitive, e.g. "Leopard"). */
+  /** Catalog courier code (lowercased on the wire, per the plugin). */
   courierCode: string;
-  /** overnight | overland | detain */
+  /** overnight | overland | detain (lowercased on the wire, per the plugin). */
   serviceType: string;
   productName: string;
   /** Weight in kg. */
@@ -112,7 +125,7 @@ export interface FlashipOrderPayloadInput {
   externalRefNo?: string;
 }
 
-/** The exact required-field list Flaship enforces on POST /orders. */
+/** The exact required-field list Flaship enforces on POST /bookings/. */
 export const FLASHIP_ORDER_REQUIRED_FIELDS = [
   "pickup_id",
   "courier_code",
@@ -127,26 +140,33 @@ export const FLASHIP_ORDER_REQUIRED_FIELDS = [
 ] as const;
 
 /**
- * Build the POST /orders body (snake_case). Pure function — values come from
- * the caller (order / customer / items / settings / booking selection).
+ * Build the POST /bookings/ body (snake_case, plugin-identical). Pure
+ * function — values come from the caller (order / customer / items /
+ * settings / booking selection).
  */
 export function buildFlashipOrderPayload(input: FlashipOrderPayloadInput): Record<string, unknown> {
   const payload: Record<string, unknown> = {
-    // Value fidelity: NO toLowerCase(), NO parseInt() — Flaship validates the
-    // courier/pickup pair case-sensitively against merchant_pickup_couriers.
+    // Value fidelity per the official plugin: pickup_id is the catalog id
+    // verbatim (DRF coerces numeric strings; the plugin absint()s because WP
+    // form input is always a string); courier_code and service_type are
+    // LOWERCASED exactly like the plugin (strtolower) — Flaship's order API
+    // matches the lowercase courier codes.
     pickup_id: String(input.pickupId ?? "").trim(),
-    courier_code: String(input.courierCode ?? "").trim(),
-    service_type: String(input.serviceType ?? "").trim() || "overnight",
+    courier_code: String(input.courierCode ?? "").trim().toLowerCase(),
+    service_type: String(input.serviceType ?? "").trim().toLowerCase() || "overnight",
     product_name: String(input.productName ?? "").trim() || "Products",
     net_weight: Number(input.netWeight ?? 0.5) || 0.5,
     cod_amount: Number(input.codAmount ?? 0) || 0,
     consignee_name: String(input.consigneeName ?? "").trim(),
     consignee_phone_primary: normalizePkPhone(input.consigneePhonePrimary ?? ""),
+    consignee_phone_secondary: "", // plugin sends '' explicitly — keep byte-for-byte parity
     consignee_address: String(input.consigneeAddress ?? "").trim(),
     consignee_city: String(input.consigneeCity ?? "").trim(),
   };
   if (input.productPieces !== undefined) {
-    payload.product_pieces = Math.max(1, Number(input.productPieces) || 1);
+    // Plugin key name: `pieces` (NOT product_pieces — that was the retired
+    // camelCase contract's name).
+    payload.pieces = Math.max(1, Number(input.productPieces) || 1);
   }
   const instruction = String(input.specialInstruction ?? "").trim();
   if (instruction) payload.special_instruction = instruction;

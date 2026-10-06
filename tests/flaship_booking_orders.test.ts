@@ -1,22 +1,31 @@
 /// <reference types="bun-types" />
 /**
- * Flaship POST /orders booking contract tests (production fix, 2026-10).
+ * Flaship POST /bookings/ booking contract tests (production fix, 2026-10).
  *
- * Production failure: Flaship reachable + auth OK, but the booking POST was
- * rejected because the required snake_case fields were absent:
- *   pickup_id, courier_code, service_type, product_name, net_weight,
- *   cod_amount, consignee_name, consignee_phone_primary, consignee_address,
- *   consignee_city
+ * Production failure timeline (both layers proven):
+ *   1. The original build posted a CAMELCASE payload to {base}/bookings/ —
+ *      Flaship's DRF validator requires the snake_case keys, so every key was
+ *      reported "This field is required." (DRF only says "required" when the
+ *      key is ABSENT from the parsed body — empty values would say
+ *      "may not be blank" instead).
+ *   2. The 24e0bd4 hotfix built the correct snake_case payload but moved the
+ *      endpoint to /orders and canonicalized the stored "/bookings/" to
+ *      "/orders". The OFFICIAL Flaship WooCommerce plugin (vendor's own client)
+ *      proves booking is created at POST {base}/bookings/ — /orders is
+ *      tracking-only — and that the payload lowercases courier_code/
+ *      service_type, uses the key `pieces`, and sends "" for
+ *      consignee_phone_secondary.
  *
  * Coverage:
  *   A. buildFlashipOrderPayload — every required field populated from REAL
- *      order data (no hardcoded values), verbatim catalog fidelity, phone
- *      normalization, optional keys, prepaid cod_amount 0.
+ *      order data (no hardcoded values), plugin-identical wire transformations
+ *      (lowercase courier_code/service_type, `pieces`, "" phone secondary),
+ *      phone normalization, optional keys, prepaid cod_amount 0.
  *   B. findMissingBookingFields — completeness gate mirrors Flaship's
  *      validator exactly (whitespace/NaN/undefined count as missing).
  *   C. bookOrderWithFlaship (service, mocked transport + DB):
- *      - POST goes to {base}/orders (NOT the legacy /bookings/)
- *      - legacy stored endpoints.bookings="/bookings/" is canonicalized
+ *      - POST goes to {base}/bookings/ (the official endpoint)
+ *      - a stored bad "/orders" endpoint (24e0bd4 default) is healed
  *      - request body carries every required field from the fake order
  *      - missing order data → useful FlashipError BEFORE any fetch or
  *        booking-state write (zero side effects)
@@ -48,7 +57,7 @@ const FULL_INPUT = {
   externalRefNo: "RC-1001",
 };
 
-describe("buildFlashipOrderPayload — POST /orders snake_case contract", () => {
+describe("buildFlashipOrderPayload — POST /bookings/ snake_case contract", () => {
   it("populates EVERY required Flaship field from real order data", () => {
     const payload = buildFlashipOrderPayload(FULL_INPUT);
     // every field Flaship rejected as missing must now be present and non-empty
@@ -57,30 +66,34 @@ describe("buildFlashipOrderPayload — POST /orders snake_case contract", () => 
       expect(v !== undefined && v !== null && String(v).trim() !== "").toBe(true);
     }
     expect(payload.pickup_id).toBe("PK-9012");
-    expect(payload.courier_code).toBe("Leopard");
+    expect(payload.courier_code).toBe("leopard"); // plugin lowercases courier codes
     expect(payload.service_type).toBe("overnight");
     expect(payload.product_name).toBe("Massage Chair (x1) -- Serum (x3)");
     expect(payload.net_weight).toBe(0.5);
     expect(payload.cod_amount).toBe(1500);
     expect(payload.consignee_name).toBe("Ahmed Raza");
     expect(payload.consignee_phone_primary).toBe("03001234567"); // +92 → 0
+    expect(payload.consignee_phone_secondary).toBe(""); // plugin sends '' explicitly
     expect(payload.consignee_address).toBe("12-B, Gulberg III, Lahore");
     expect(payload.consignee_city).toBe("Lahore");
   });
 
-  it("keeps catalog fidelity: no lowercasing, no parseInt on ids", () => {
+  it("mirrors the plugin's wire transformations: lowercase codes, verbatim pickup id", () => {
     const payload = buildFlashipOrderPayload({
       ...FULL_INPUT,
-      pickupId: "12345", // numeric-looking id must stay a STRING
+      pickupId: "12345", // numeric-looking id must stay a STRING (DRF coerces it, like the plugin's absint output)
       courierCode: "MNP",
+      serviceType: "Overnight", // UI casing must not leak to the wire
     });
     expect(payload.pickup_id).toBe("12345");
-    expect(payload.courier_code).toBe("MNP");
+    expect(payload.courier_code).toBe("mnp");
+    expect(payload.service_type).toBe("overnight");
   });
 
-  it("sends optional keys when available and applies safe defaults otherwise", () => {
+  it("sends the plugin's optional keys when available and applies safe defaults otherwise", () => {
     const full = buildFlashipOrderPayload(FULL_INPUT);
-    expect(full.product_pieces).toBe(4);
+    expect(full.pieces).toBe(4); // plugin key name — NOT product_pieces
+    expect("product_pieces" in full).toBe(false);
     expect(full.special_instruction).toBe("Ring the bell");
     expect(full.external_ref_no).toBe("RC-1001");
 
@@ -99,8 +112,10 @@ describe("buildFlashipOrderPayload — POST /orders snake_case contract", () => 
     expect(minimal.service_type).toBe("overnight"); // default
     expect(minimal.net_weight).toBe(0.5); // default
     expect(minimal.cod_amount).toBe(0); // preserved
+    expect(minimal.consignee_phone_secondary).toBe("");
     expect("special_instruction" in minimal).toBe(false);
     expect("external_ref_no" in minimal).toBe(false);
+    expect("pieces" in minimal).toBe(false);
   });
 });
 
@@ -169,7 +184,8 @@ function seedHappyPath() {
     ],
     // live-mode pair guard data: (Leopard, PK-9012) is mapped
     flaship_pickup_couriers: [{ pickup_id: "PK-9012", courier_id: "Leopard" }],
-    // legacy stored endpoints — must be canonicalized to /orders
+    // stored endpoints exactly as production has them (seed value) — the
+    // official "/bookings/" must pass through VERBATIM (never rewritten)
     settings: [
       {
         key: "flaship",
@@ -250,30 +266,33 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-describe("bookOrderWithFlaship — POST /orders transport contract", () => {
-  it("POSTs to {base}/orders (legacy /bookings/ canonicalized) with every required field", async () => {
+describe("bookOrderWithFlaship — POST /bookings/ transport contract", () => {
+  it("POSTs the plugin-identical snake payload to {base}/bookings/ with every required field", async () => {
     seedHappyPath();
     const result = await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
 
     expect(fetchCalls).toHaveLength(1);
     const { url, init } = fetchCalls[0];
-    // endpoint: base + /orders — the legacy stored "/bookings/" must NOT win
-    expect(url).toBe("https://partners.flaship.pk/api/integration/orders");
+    // endpoint: the OFFICIAL create-booking endpoint per the Flaship WooCommerce
+    // plugin — the stored "/bookings/" (seed value, as in production) passes through
+    expect(url).toBe("https://partners.flaship.pk/api/integration/bookings/");
     expect(init.method).toBe("POST");
 
     const body = JSON.parse(String(init.body));
     for (const key of FLASHIP_ORDER_REQUIRED_FIELDS) {
       expect(body[key] !== undefined && body[key] !== null && String(body[key]).trim() !== "").toBe(true);
     }
-    // values from the REAL order data, verbatim where required
+    // values from the REAL order data, with the plugin's wire transformations
     expect(body.pickup_id).toBe("PK-9012");
-    expect(body.courier_code).toBe("Leopard");
+    expect(body.courier_code).toBe("leopard"); // lowercased per plugin strtolower
     expect(body.service_type).toBe("overnight");
     expect(body.product_name).toBe("Massage Chair (x1) -- Serum (x3)");
     expect(body.net_weight).toBe(0.5);
+    expect(body.pieces).toBe(4); // 1 chair + 3 serums
     expect(body.cod_amount).toBe(1500);
     expect(body.consignee_name).toBe("Ahmed Raza");
     expect(body.consignee_phone_primary).toBe("03001234567");
+    expect(body.consignee_phone_secondary).toBe("");
     expect(body.consignee_address).toBe("12-B, Gulberg III, Lahore");
     expect(body.consignee_city).toBe("Lahore");
     expect(body.external_ref_no).toBe("RC-1001");
@@ -285,6 +304,20 @@ describe("bookOrderWithFlaship — POST /orders transport contract", () => {
     expect(result.courierName).toBe("Leopard");
     const booked = updateCalls.find((u) => u.table === "orders" && u.patch.booking_status === "booked");
     expect(booked).toBeDefined();
+  });
+
+  it("heals a stored bad '/orders' endpoint (24e0bd4 regression) back to /bookings/", async () => {
+    seedHappyPath();
+    // simulate an environment that saved the bad 24e0bd4 default
+    const settingsRow = tables.settings![0] as Row;
+    settingsRow.value = {
+      ...(settingsRow.value as Row),
+      endpoints: { bookings: "/orders" },
+    };
+    await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0].url).toBe("https://partners.flaship.pk/api/integration/bookings/");
   });
 
   it("fails BEFORE any request or state change when order data is incomplete", async () => {

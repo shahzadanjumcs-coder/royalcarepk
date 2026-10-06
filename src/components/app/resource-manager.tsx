@@ -55,6 +55,7 @@ export function ResourceManager<T extends { id: string }>(props: ResourceManager
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<T | null>(null);
   const [deleting, setDeleting] = useState<T | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const qs = buildQuery({ search: debounced, page, perPage: 15 });
   const { data, loading, error, refresh } = useList<T>(`${endpoint}${qs}`, [debounced, page]);
@@ -79,8 +80,13 @@ export function ResourceManager<T extends { id: string }>(props: ResourceManager
   const confirmDelete = async () => {
     if (!deleting) return;
     try {
-      if (onDelete) await onDelete(deleting);
-      else await api(`${endpoint}/${deleting.id}`, { method: "DELETE" });
+      // A delete may be a soft-archive (e.g. products with order history are
+      // deactivated instead of removed). Whatever the API reports back is
+      // surfaced as a notice so the row visibly staying in the list is never
+      // mistaken for a broken button.
+      const message = onDelete ? await onDelete(deleting) : undefined;
+      setDeleting(null);
+      setNotice(typeof message === "string" && message ? message : "Deleted successfully.");
       refresh();
     } catch (e) {
       throw e instanceof ApiError ? e : new Error("Delete failed.");
@@ -140,6 +146,23 @@ export function ResourceManager<T extends { id: string }>(props: ResourceManager
           ) : null
         }
       />
+
+      {notice ? (
+        <div
+          role="status"
+          className="flex items-start justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="text-amber-700 hover:text-amber-900"
+            aria-label="Dismiss notice"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       <DataTable
         columns={[...columns, actionColumn]}

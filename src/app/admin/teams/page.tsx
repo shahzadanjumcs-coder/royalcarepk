@@ -1,6 +1,7 @@
 "use client";
 
 import { ResourceManager } from "@/components/app/resource-manager";
+import { useSession } from "@/lib/use-session";
 import type { Column } from "@/components/app/data-table";
 
 interface TeamRow {
@@ -13,11 +14,16 @@ interface TeamRow {
 }
 
 export default function TeamsPage() {
+  // DELETE /api/teams/[id] is admin-only — hide the control from roles the
+  // API would reject (the list API also serves inventory_manager).
+  const { session } = useSession();
+  const canDelete = session?.role === "super_admin" || session?.role === "admin";
   return (
     <ResourceManager<TeamRow>
       title="Teams"
       description="Group workers into zones or shifts"
       endpoint="/api/teams"
+      canDelete={canDelete}
       emptyTitle="No teams yet"
       emptyDescription="Create teams to organize workers by area or shift."
       createLabel="Create team"

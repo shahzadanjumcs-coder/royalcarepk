@@ -4,7 +4,9 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, useApi, ApiError } from "@/lib/client";
+import { useSession } from "@/lib/use-session";
 import { PageHeader, PageSpinner, ErrorState } from "@/components/app/states";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { OrderStatusBadge, BookingStatusBadge, CommissionTypeBadge, ApprovalStatusBadge } from "@/components/app/badges";
 import { ApprovalActions } from "@/components/app/approval-actions";
 import { Button } from "@/components/ui/button";
@@ -82,6 +84,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [courier, setCourier] = useState("");
   const [pickup, setPickup] = useState("");
   const [workerId, setWorkerId] = useState("");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const { session } = useSession();
 
   // Only pickup locations actually mapped to the selected courier (Flaship's
   // merchant_pickup_couriers). Empty mapping data → full list (graceful
@@ -165,6 +169,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       await api(`/api/orders/${id}/assign`, { method: "POST", json: { worker_id: workerId } });
       return "Worker assigned.";
     });
+
+  const deleteOrder = async () => {
+    setBusy("delete-order");
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await api(`/api/orders/${id}`, { method: "DELETE" });
+      router.push("/admin/orders");
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : "Delete failed. Please try again.");
+      setBusy(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -344,6 +361,28 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <p className="text-sm text-muted-foreground">This order is closed — no further status changes.</p>
               )}
 
+              {/* Danger zone — cancelled-order removal (super_admin only, test cleanup) */}
+              {session?.role === "super_admin" && order.status === "CANCELLED" ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3">
+                  <p className="text-sm font-medium text-rose-900">Danger zone</p>
+                  <p className="mt-1 text-xs text-rose-800">
+                    Permanently remove this cancelled order from RoyalCarePK together with its items, shipment and
+                    tracking rows. Flaship is not contacted. Meant for cancelled test orders — genuine order history
+                    should be kept.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 border-rose-300 text-rose-700 hover:bg-rose-100"
+                    disabled={busy === "delete-order"}
+                    onClick={() => setConfirmDeleteOpen(true)}
+                  >
+                    {busy === "delete-order" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                    Delete cancelled order
+                  </Button>
+                </div>
+              ) : null}
+
               {/* Assign worker */}
               {!["DELIVERED", "RETURNED", "CANCELLED"].includes(order.status) ? (
                 <div className="rounded-lg border border-border p-3">
@@ -486,6 +525,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </Card>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="Delete this cancelled order?"
+        description={`Permanently removes order ${order?.order_number ?? ""} and its items/shipment/tracking rows from RoyalCarePK. Flaship is not contacted. This cannot be undone.`}
+        confirmLabel="Delete order"
+        destructive
+        onConfirm={deleteOrder}
+      />
     </div>
   );
 }

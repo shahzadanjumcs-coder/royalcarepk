@@ -611,6 +611,13 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
 
     if (order.status !== "BOOKED" && order.status !== "IN_TRANSIT") {
       await changeOrderStatus(session ?? { userId: "system" }, orderId, "BOOKED", `Booked with ${courierName}`);
+    } else {
+      // Partial-failure recovery: the order already reached BOOKED/IN_TRANSIT
+      // in a previous attempt whose booking write failed afterwards. The
+      // booking itself just succeeded (CN allocated) — make sure the BOOKED
+      // customer notification is enqueued. Idempotent: services/whatsapp.ts
+      // dedupes on (order, type, recipient) and never throws.
+      await enqueueWhatsAppOrderEvent({ orderId, type: "BOOKED" });
     }
 
     await logAudit({

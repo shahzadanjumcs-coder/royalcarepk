@@ -19,7 +19,11 @@ export function canApprove(role: string | undefined): boolean {
 
 /** Allowed status transitions (pragmatic courier workflow). */
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  CREATED: ["PENDING", "ASSIGNED", "CANCELLED"],
+  // CREATED orders are admin-created (approval_status APPROVED) and can be
+  // booked directly — bookOrderWithFlaship books on Flaship FIRST and then
+  // moves the order to BOOKED; rejecting CREATED→BOOKED left booked orders
+  // stuck as CREATED with booking_status "failed" and fired no WhatsApp event.
+  CREATED: ["PENDING", "ASSIGNED", "BOOKED", "CANCELLED"],
   PENDING: ["ASSIGNED", "BOOKED", "CANCELLED"],
   ASSIGNED: ["PENDING", "BOOKED", "CANCELLED"],
   BOOKED: ["IN_TRANSIT", "RETURNED", "CANCELLED"],

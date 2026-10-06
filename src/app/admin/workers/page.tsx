@@ -2,6 +2,7 @@
 
 import { ResourceManager } from "@/components/app/resource-manager";
 import { UserStatusBadge } from "@/components/app/badges";
+import { useSession } from "@/lib/use-session";
 import type { Column } from "@/components/app/data-table";
 import { formatCurrency } from "@/lib/utils";
 
@@ -23,11 +24,17 @@ interface WorkerRow {
 }
 
 export default function WorkersPage() {
+  // Worker accounts are deleted ONLY by a super_admin (the API enforces it
+  // and deletes the auth user) — hide the destructive control from plain
+  // admins instead of letting them hit a 403.
+  const { session } = useSession();
+  const canDelete = session?.role === "super_admin";
   return (
     <ResourceManager<WorkerRow>
       title="Workers"
       description="Field team, commission rates and earnings at a glance"
       endpoint="/api/workers"
+      canDelete={canDelete}
       searchPlaceholder="Search name, email, worker code…"
       searchFields={["name", "email", "worker_code", "phone"]}
       emptyTitle="No workers yet"

@@ -1,6 +1,7 @@
 "use client";
 
 import { ResourceManager } from "@/components/app/resource-manager";
+import { useSession } from "@/lib/use-session";
 import type { Column } from "@/components/app/data-table";
 import { formatCurrency } from "@/lib/utils";
 
@@ -18,6 +19,10 @@ interface CustomerRow {
 }
 
 export default function CustomersPage() {
+  // DELETE /api/customers/[id] is admin-only — match the API gate so lower
+  // roles never see a destructive control that would just 403.
+  const { session } = useSession();
+  const canDelete = session?.role === "super_admin" || session?.role === "admin";
   return (
     <ResourceManager<CustomerRow>
       title="Customers"

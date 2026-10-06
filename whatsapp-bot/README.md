@@ -136,3 +136,25 @@ substitution (no code can execute): `{{customer_name}} {{order_number}}
 Sequential sends, configurable delay (default 2.5s), bounded retries, no bulk
 messaging features, no anti-detection tricks, no CAPTCHA handling, no scraping.
 Keep the bot to legitimate RoyalCarePK transactional notifications.
+
+## Hosting: why NOT Vercel, and where to run instead
+
+The web app runs on Vercel; this bot CANNOT. It is a long-lived daemon that:
+
+1. keeps four infinite poll loops alive (commands, queue, heartbeat, reconcile),
+2. holds a multi-day WebSocket per WhatsApp account (two live sockets on one
+   session get killed with 440 conflict forever),
+3. stores Baileys auth sessions on a writable, persistent filesystem
+   (`WHATSAPP_SESSION_DIR`) that must survive restarts,
+4. binds a health port (`PORT`, default 3088).
+
+Vercel functions are request-scoped with read-only/ephemeral filesystem and no
+bindable ports — all four requirements fail there. Run the bot on ANY
+always-on machine you control (office PC + pm2, Raspberry Pi) or a cheap/free
+always-on host (e.g. an Oracle Cloud free-tier VPS, Railway/Fly.io instance).
+
+No new integration work is needed when you move hosts: the bot and the web app
+communicate ONLY through Supabase tables (`whatsapp_message_queue` outbox,
+`whatsapp_commands` control, `whatsapp_accounts`/`whatsapp_bot_settings`
+status). The web app never talks to the bot over HTTP, so no URL/token needs
+configuring — just set the two Supabase vars above and `npm start`.

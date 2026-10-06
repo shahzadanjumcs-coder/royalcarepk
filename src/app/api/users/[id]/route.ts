@@ -28,6 +28,27 @@ export const PATCH = withAuth(["super_admin", "admin"], async (session: Session,
       return fail("You cannot disable your own account.", 422);
     }
 
+    // Last-super-admin protection: disabling the target or demoting it away
+    // from super_admin must never leave the workspace without an active
+    // super administrator (self-disable is already blocked above; self-demotion
+    // goes through this same guard).
+    if (targetRole === "super_admin") {
+      const demoting = !!body.role && body.role !== "super_admin";
+      const disabling = body.status === "disabled";
+      if (demoting || disabling) {
+        const { rows: activeSupers } = await store.list("profiles", {
+          filters: { role: "super_admin", status: "active" },
+        });
+        const otherActiveSupers = activeSupers.filter((u) => (u as { id: string }).id !== id);
+        if (otherActiveSupers.length === 0) {
+          return fail(
+            "This is the last active Super Admin. Promote another Super Admin before removing this one.",
+            422
+          );
+        }
+      }
+    }
+
     const updates: Record<string, unknown> = {};
     if (body.role) updates.role = body.role;
     if (body.status && ["active", "disabled"].includes(body.status)) updates.status = body.status;

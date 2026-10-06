@@ -1,6 +1,6 @@
 import { ok, fail, withAuth, GENERIC_ERROR } from "@/lib/api/helpers";
 import { store } from "@/lib/store";
-import { normalizePkWhatsApp } from "@/lib/services/whatsapp";
+import { normalizePkWhatsApp, getWhatsAppBotSettings, isBotOnline, isAccountSessionLive } from "@/lib/services/whatsapp";
 
 /** Same sanity rule the bot applies to group JIDs (bot/src/lib.js). */
 const GROUP_JID_RE = /^[0-9]{10,25}(-[0-9]+)?@g\.us$/;
@@ -19,6 +19,12 @@ type TestBody = {
  * Mirrors the account-action pattern: the admin panel inserts a command row,
  * the always-on bot claims it, sends via the connected session, and the panel
  * polls the command result. Nothing here talks to WhatsApp directly.
+ *
+ * The bot heartbeat is checked BEFORE queueing: an offline bot would leave
+ * the command pending forever and look like a success that never arrives.
+ * In that case the test is refused with an explicit "Bot is offline" instead
+ * of pretending the message will be sent. Real order notifications are NOT
+ * blocked by this — they are an outbox and queue safely while offline.
  */
 export const POST = withAuth(["super_admin", "admin"], async (_session, req) => {
   try {
@@ -31,14 +37,27 @@ export const POST = withAuth(["super_admin", "admin"], async (_session, req) => 
     if (!message) return fail("Write a test message first.", 422);
     if (message.length > 3000) return fail("Test message is too long (max 3000 characters).", 422);
 
-    const account = await store.get<{ id: string; name: string; enabled: boolean; status: string }>(
+    const bot = await getWhatsAppBotSettings();
+    if (!isBotOnline(bot)) {
+      return fail(
+        "Bot is offline — start the WhatsApp bot service on your always-on machine, then retry. The test was NOT queued.",
+        503
+      );
+    }
+
+    const account = await store.get<{ id: string; name: string; enabled: boolean; status: string; last_seen_at: string | null }>(
       "whatsapp_accounts",
       accountId
     );
     if (!account) return fail("WhatsApp account not found.", 404);
     if (!account.enabled) return fail("Enable this account before sending tests through it.", 422);
-    if (account.status !== "connected") {
-      return fail(`"${account.name}" is not connected — connect it first.`, 422);
+    if (!isAccountSessionLive(account)) {
+      return fail(
+        account.status === "connected"
+          ? `"${account.name}" shows connected but the bot has not reported its session recently — check the bot service, then reconnect the account.`
+          : `"${account.name}" is not connected — connect it first.`,
+        422
+      );
     }
 
     if (kind === "group") {

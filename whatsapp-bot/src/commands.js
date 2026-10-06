@@ -67,16 +67,22 @@ class CommandRunner {
           const normalized = normalizePkWhatsApp(payload.phone);
           if (!normalized.valid) throw new Error(normalized.reason ?? "Invalid test phone number.");
           const accountName = await this.accountName(payload.account_id);
-          await this.manager.sendText(payload.account_id, toJid(normalized.digits, "customer"), prefixTestMessage(payload.message));
-          await this.finish(cmd.id, "done", `Test delivered via "${accountName}" to ${normalized.digits}.`);
+          // SAME real send layer as queued order notifications: connected
+          // session -> onWhatsApp check -> timed sendMessage -> returned id.
+          const { waMessageId } = await this.manager.sendText(
+            payload.account_id,
+            toJid(normalized.digits, "customer"),
+            prefixTestMessage(payload.message)
+          );
+          await this.finish(cmd.id, "done", `Test delivered via "${accountName}" to ${normalized.digits}${waMessageId ? ` (WhatsApp id ${waMessageId})` : ""}.`);
           break;
         }
         case "test_group": {
           const jid = String(payload.group_jid ?? "").trim();
           if (!isGroupJid(jid)) throw new Error("Invalid group JID.");
           const accountName = await this.accountName(payload.account_id);
-          await this.manager.sendText(payload.account_id, jid, prefixTestMessage(payload.message));
-          await this.finish(cmd.id, "done", `Test delivered via "${accountName}" to group ${jid}.`);
+          const { waMessageId } = await this.manager.sendText(payload.account_id, jid, prefixTestMessage(payload.message));
+          await this.finish(cmd.id, "done", `Test delivered via "${accountName}" to group ${jid}${waMessageId ? ` (WhatsApp id ${waMessageId})` : ""}.`);
           break;
         }
         case "list_groups": {

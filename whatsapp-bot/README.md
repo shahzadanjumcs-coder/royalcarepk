@@ -39,6 +39,11 @@ cp .env.example .env      # then edit .env (see below)
 npm test                  # optional: unit tests
 ```
 
+> **Prerequisite:** apply `supabase/migrations/0008_whatsapp_delivery_evidence.sql`
+> to the Supabase project (SQL editor) BEFORE restarting the bot — it adds the
+> `wa_message_id` / `wa_delivery_status` / `delivered_at` columns the bot writes
+> as send evidence. The migration is additive and safe to re-run.
+
 ### Environment variables (.env)
 
 | Variable | Required | Meaning |
@@ -49,6 +54,7 @@ npm test                  # optional: unit tests
 | `WHATSAPP_POLL_MS` | no | poll interval for commands/queue (default 3000) |
 | `WHATSAPP_SEND_DELAY_MS` | no | fallback delay between sends (default 2500; admin setting wins) |
 | `WHATSAPP_RECONNECT_BASE_MS` | no | reconnect backoff base in ms (default 10000; doubles per attempt up to 5 min) |
+| `WHATSAPP_SEND_TIMEOUT_MS` | no | hard ceiling per send attempt (default 45000) — a zombie socket rejects instead of hanging forever |
 | `PORT` | no | local health endpoint port (default 3088, `0` disables) |
 
 ### Start / stop
@@ -121,6 +127,61 @@ substitution (no code can execute): `{{customer_name}} {{order_number}}
 - **Invalid numbers**: recorded once as `failed` with the reason — never retried in a loop.
 - **Message Logs** tab: every attempt stored in `whatsapp_message_logs` (attempt #,
   status, account, error, timestamps).
+
+### What "SENT" means (delivery evidence)
+
+A message is marked `sent` ONLY when the real Baileys `sendMessage` on the live
+session resolves — never because a queue row was created or a button returned 200.
+Every sent row additionally stores:
+
+| Field | Meaning |
+|---|---|
+| `wa_message_id` | the message id **returned by WhatsApp** — the proof a send happened |
+| `wa_delivery_status` | forward-only acks: `SENT` (WhatsApp server accepted) → `DELIVERED` (recipient device acked) → `READ` |
+| `delivered_at` | when the recipient's device first acknowledged |
+
+Before each direct-chat send the bot checks the recipient on WhatsApp
+(`onWhatsApp`); a number **not on WhatsApp** fails immediately with
+“Number is not available on WhatsApp” (non-retryable) instead of vanishing
+silently. Group sends report failures the same way.
+
+Additional safety rails:
+
+- **Send timeout** (45s default): a half-dead socket can no longer hang the queue
+  row in `processing` forever — it fails and retries.
+- **Stale-processing reaper**: rows abandoned mid-send by a bot crash are
+  requeued automatically (heartbeat loop, every ~15s).
+- **Startup diagnostics** (safe — never prints secrets): Supabase project host,
+  enabled-account count, queued-message count, poll intervals, and how many
+  sessions came online after the initial reconcile. Check the FIRST log lines
+  whenever sends seem stuck — a wrong `SUPABASE_URL` (staging vs prod) is the
+  classic cause of "bot runs but nothing is ever picked up".
+- **DB status ≠ live session**: the admin UI shows *Connected* only when the
+  account row says connected AND the bot heartbeat for that account is fresh
+  (< 90s). A stale row shows “Stale — bot offline” and the Test tab refuses
+  with an explicit *Bot is offline* error instead of pretending a send.
+
+### End-to-end verification runbook (run on the bot host)
+
+After deploying, prove each path ONCE with a real test number (do not accept
+“queue row created” as success):
+
+1. Start the bot; verify the startup banner: correct Supabase host, enabled
+   accounts, `WhatsApp sessions online after initial reconcile: N`.
+2. Admin → WhatsApp → header shows **Bot online** + live sessions; Account card
+   shows **Connected** (not “Stale”).
+3. **Test F** — Test tab → send to your own number: you must RECEIVE it; the
+   result line ends with `(WhatsApp id …)`.
+4. **Test A/B/C** — create a test order with a test customer number, book it
+   (BOOKED), advance/sync tracking to OUT_FOR_DELIVERY and DELIVERED: each
+   message must arrive; Message Logs shows `sent` + `wa: delivered` + the
+   WhatsApp message id.
+5. **Test D** — set that order RETURNED: every enabled admin recipient's phone
+   receives the alert; each admin row appears separately in Message Logs.
+6. **Test E** — Test Flaship Group button: the configured group receives it
+   (bot account must be a member of that group).
+7. Stopping the bot must show rows as queued (`pending`/`retrying`) — never
+   `sent` — and they all flush when the bot restarts.
 
 ## Security notes
 

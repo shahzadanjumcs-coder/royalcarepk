@@ -583,6 +583,13 @@ export interface WhatsAppAccount {
   last_seen_at: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Server-computed: the DB row says "connected" AND the bot heartbeat for
+   * this account is fresh. A row can claim "connected" while the bot process
+   * is dead (no close event was ever written) — the UI must never treat that
+   * as a usable session.
+   */
+  session_live?: boolean;
 }
 
 export interface WhatsAppRoutingSetting {
@@ -639,6 +646,12 @@ export interface WhatsAppQueueItem {
   next_attempt_at: string;
   failure_reason: string | null;
   dedupe_key: string;
+  /** Real WhatsApp message id returned by the Baileys send — null until a
+   *  send was actually accepted by the connected session. */
+  wa_message_id: string | null;
+  /** Forward-only Baileys acks: SENT (server) -> DELIVERED (device) -> READ. */
+  wa_delivery_status: "SENT" | "DELIVERED" | "READ" | null;
+  delivered_at: string | null;
   created_at: string;
   updated_at: string;
   sent_at: string | null;
@@ -651,6 +664,7 @@ export interface WhatsAppMessageLog {
   status: "sent" | "failed";
   account_id: string | null;
   error: string | null;
+  wa_message_id: string | null;
   created_at: string;
 }
 

@@ -48,14 +48,41 @@ async function touchBotHeartbeat(sb) {
 }
 
 /** Insert a delivery attempt row into whatsapp_message_logs. */
-async function writeAttemptLog(sb, queueId, attempt, status, accountId, error) {
+async function writeAttemptLog(sb, queueId, attempt, status, accountId, error, waMessageId) {
   await sb.from("whatsapp_message_logs").insert({
     queue_id: queueId,
     attempt,
     status,
     account_id: accountId ?? null,
     error: error ?? null,
+    wa_message_id: waMessageId ?? null,
   });
+}
+
+/**
+ * Forward-only WhatsApp delivery-ack bookkeeping ( Baileys messages.update ).
+ * SENT (server ack) -> DELIVERED (recipient device acked) -> READ.
+ * Returns true when a row was actually bumped (for calm logging).
+ * Never throws for "no row matched" — acks for test sends / non-queue
+ * messages simply find nothing to update.
+ */
+const ACK_RANK = { SENT: 1, DELIVERED: 2, READ: 3 };
+async function markDeliveryProgress(sb, waMessageId, deliveryStatus) {
+  const rank = ACK_RANK[deliveryStatus];
+  if (!waMessageId || !rank) return false;
+  const { data: rows } = await sb
+    .from("whatsapp_message_queue")
+    .select("id, wa_delivery_status, status")
+    .eq("wa_message_id", waMessageId);
+  const row = rows?.[0];
+  if (!row) return false;
+  const currentRank = ACK_RANK[row.wa_delivery_status] ?? 0;
+  if (rank <= currentRank) return false; // never downgrade
+  const patch = { wa_delivery_status: deliveryStatus, updated_at: new Date().toISOString() };
+  if (rank >= ACK_RANK.DELIVERED && !row.delivered_at) patch.delivered_at = new Date().toISOString();
+  const { error } = await sb.from("whatsapp_message_queue").update(patch).eq("id", row.id);
+  if (error) throw new Error(error.message);
+  return true;
 }
 
 /**
@@ -71,4 +98,4 @@ async function writeInboxMessage(sb, row) {
   if (error) console.error("[bot] inbox write failed:", error.message);
 }
 
-module.exports = { createSupabase, readBotSettings, readRouting, updateAccount, touchBotHeartbeat, writeAttemptLog, writeInboxMessage };
+module.exports = { createSupabase, readBotSettings, readRouting, updateAccount, touchBotHeartbeat, writeAttemptLog, writeInboxMessage, markDeliveryProgress };

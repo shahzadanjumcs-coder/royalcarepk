@@ -3,8 +3,20 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/** Status badge for WhatsApp account connection state. */
-export function WAConnectionBadge({ status }: { status: string }) {
+/**
+ * Status badge for WhatsApp account connection state.
+ * `live` comes from the API (DB status "connected" + fresh bot heartbeat).
+ * A stale row means the bot process is gone — the badge must never keep
+ * claiming "Connected" just because a database row says so.
+ */
+export function WAConnectionBadge({ status, live }: { status: string; live?: boolean }) {
+  if (status === "connected" && live === false) {
+    return (
+      <Badge variant="outline" className="bg-amber-50 font-medium text-amber-700 border-amber-200">
+        Stale — bot offline
+      </Badge>
+    );
+  }
   const map: Record<string, { label: string; cls: string }> = {
     connected: { label: "Connected", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
     connecting: { label: "Connecting…", cls: "bg-amber-50 text-amber-700 border-amber-200" },
@@ -16,6 +28,22 @@ export function WAConnectionBadge({ status }: { status: string }) {
       {s.label}
     </Badge>
   );
+}
+
+/**
+ * Forward-only WhatsApp delivery evidence for a sent message:
+ * SENT = the connected session accepted the send (server ack),
+ * DELIVERED = the recipient's device acknowledged it, READ = seen.
+ */
+export function WADeliveryBadge({ delivery }: { delivery: "SENT" | "DELIVERED" | "READ" | null | undefined }) {
+  if (!delivery) return null;
+  const map: Record<string, { label: string; cls: string }> = {
+    SENT: { label: "wa: sent to server", cls: "bg-sky-50 text-sky-700 border-sky-200" },
+    DELIVERED: { label: "wa: delivered", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    READ: { label: "wa: read", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  };
+  const s = map[delivery] ?? map.SENT;
+  return <Badge variant="outline" className={cn("font-medium", s.cls)}>{s.label}</Badge>;
 }
 
 /** Status badge for message queue rows. */

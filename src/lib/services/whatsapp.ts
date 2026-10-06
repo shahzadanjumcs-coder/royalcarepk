@@ -122,6 +122,31 @@ export function buildDedupeKey(orderId: string, type: WhatsAppNotificationType, 
 
 // ------------------------------------------------------------- bot settings -
 
+/** A bot heartbeat older than this means the bot service is effectively offline. */
+export const BOT_HEARTBEAT_STALE_MS = 90 * 1000; // bot beats every ~15s
+
+/** True when the bot service has pinged recently. */
+export function isBotOnline(bot: { last_bot_seen_at: string | null } | null | undefined, nowMs = Date.now()): boolean {
+  const lastSeen = bot?.last_bot_seen_at ? new Date(bot.last_bot_seen_at).getTime() : 0;
+  return lastSeen > 0 && nowMs - lastSeen < BOT_HEARTBEAT_STALE_MS;
+}
+
+/**
+ * A row can claim status "connected" while the bot process is dead — no
+ * close event is ever written when the machine loses power. The account is
+ * only genuinely usable when its per-account heartbeat (last_seen_at, also
+ * written every ~15s) is fresh. DB status alone is NEVER proof of a live
+ * Baileys socket.
+ */
+export function isAccountSessionLive(
+  account: { status: string; last_seen_at: string | null } | null | undefined,
+  nowMs = Date.now()
+): boolean {
+  if (!account || account.status !== "connected") return false;
+  const lastSeen = account.last_seen_at ? new Date(account.last_seen_at).getTime() : 0;
+  return lastSeen > 0 && nowMs - lastSeen < BOT_HEARTBEAT_STALE_MS;
+}
+
 export async function getWhatsAppBotSettings(): Promise<WhatsAppBotSettings | null> {
   return store.first<WhatsAppBotSettings>("whatsapp_bot_settings", {});
 }

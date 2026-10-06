@@ -1,13 +1,15 @@
 import { ok, withAuth, GENERIC_ERROR } from "@/lib/api/helpers";
 import { store } from "@/lib/store";
-import { getWhatsAppBotSettings } from "@/lib/services/whatsapp";
+import { getWhatsAppBotSettings, isBotOnline, isAccountSessionLive } from "@/lib/services/whatsapp";
 import type { WhatsAppAccount, WhatsAppQueueItem } from "@/lib/types";
-
-const BOT_OFFLINE_AFTER_MS = 90 * 1000; // heartbeat every ~15s
 
 /**
  * GET /api/whatsapp/overview — dashboard summary for the WhatsApp page header:
  * which numbers are connected, bot online state, queue health at a glance.
+ *
+ * "connected" counts ONLY live sessions (DB status connected + fresh
+ * per-account bot heartbeat); accounts whose row still says connected but
+ * whose bot has gone silent are reported separately as stale_connected.
  */
 export const GET = withAuth(["super_admin", "admin"], async () => {
   try {
@@ -16,6 +18,9 @@ export const GET = withAuth(["super_admin", "admin"], async () => {
       perPage: 100,
     });
     const bot = await getWhatsAppBotSettings();
+    const nowMs = Date.now();
+    const live = accounts.filter((a) => isAccountSessionLive(a, nowMs));
+    const staleConnected = accounts.filter((a) => a.status === "connected" && !isAccountSessionLive(a, nowMs));
 
     const counts = { pending: 0, processing: 0, retrying: 0, failed: 0, sent: 0, cancelled: 0 };
     const statuses = ["pending", "processing", "retrying", "failed", "sent", "cancelled"];
@@ -23,8 +28,7 @@ export const GET = withAuth(["super_admin", "admin"], async () => {
       counts[status as keyof typeof counts] = await store.count("whatsapp_message_queue", { status });
     }
 
-    const lastSeen = bot?.last_bot_seen_at ? new Date(bot.last_bot_seen_at).getTime() : 0;
-    const botOnline = lastSeen > 0 && Date.now() - lastSeen < BOT_OFFLINE_AFTER_MS;
+    const botOnline = isBotOnline(bot, nowMs);
 
     // latest failure reason for the header hint (if any)
     const { rows: lastFailed } = await store.list<WhatsAppQueueItem>("whatsapp_message_queue", {
@@ -36,7 +40,8 @@ export const GET = withAuth(["super_admin", "admin"], async () => {
     return ok({
       accounts: {
         total: accounts.length,
-        connected: accounts.filter((a) => a.status === "connected").length,
+        connected: live.length,
+        stale_connected: staleConnected.length,
         connecting: accounts.filter((a) => a.status === "connecting").length,
         enabled: accounts.filter((a) => a.enabled).length,
       },
@@ -56,7 +61,7 @@ export const GET = withAuth(["super_admin", "admin"], async () => {
   } catch (e) {
     console.error("[whatsapp.overview]", e);
     return ok({
-      accounts: { total: 0, connected: 0, connecting: 0, enabled: 0 },
+      accounts: { total: 0, connected: 0, stale_connected: 0, connecting: 0, enabled: 0 },
       counts: { pending: 0, processing: 0, retrying: 0, failed: 0, sent: 0, cancelled: 0 },
       paused: false,
       failover_enabled: false,

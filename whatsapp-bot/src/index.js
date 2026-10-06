@@ -56,8 +56,38 @@ async function main() {
 
   console.log(`RoyalCarePK WhatsApp bot starting — sessions in ${SESSION_DIR}`);
 
+  // ---------------------------------------------------------------- startup
+  // Safe diagnostics: prove WHICH Supabase project this bot is polling and
+  // that the tables are readable. Never prints the service-role key or any
+  // session secret — only the URL host, which the operator must eyeball
+  // against the RoyalCarePK project (a staging/prod mismatch here is the
+  // classic "bot works but nothing is ever picked up" cause).
+  try {
+    const urlHost = new URL(process.env.SUPABASE_URL).host;
+    console.log(`[bot] Supabase project: ${urlHost}`);
+    const { count: enabledCount, error: accountsError } = await sb
+      .from("whatsapp_accounts")
+      .select("id", { count: "exact", head: true })
+      .eq("enabled", true);
+    if (accountsError) throw accountsError;
+    const { count: pendingCount, error: queueError } = await sb
+      .from("whatsapp_message_queue")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pending", "retrying"]);
+    if (queueError) throw queueError;
+    console.log(`[bot] Supabase connected — enabled WhatsApp accounts: ${enabledCount ?? 0}, queued messages waiting: ${pendingCount ?? 0}`);
+    console.log(`[bot] Queue polling active every ${POLL_MS}ms; heartbeat every ${HEARTBEAT_MS}ms`);
+  } catch (e) {
+    console.error(`[bot] STARTUP DIAGNOSTIC FAILED — check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY: ${e.message}`);
+  }
+
+  // recover rows left in "processing" by a previous crashed run BEFORE the
+  // queue loop starts, so nothing is orphaned from the first minute on
+  await queue.requeueStale().catch((e) => console.error("[bot] stale requeue:", e.message));
+
   // initial reconciliation: bring every enabled account online
   await manager.reconcile().catch((e) => console.error("[bot] initial reconcile:", e.message));
+  console.log(`[bot] WhatsApp sessions online after initial reconcile: ${[...manager.socks.keys()].filter((id) => manager.isConnected(id)).length || 0}`);
 
   // command loop (pairing, tests, group listing)
   (async function commandLoop() {
@@ -105,6 +135,7 @@ async function main() {
       try {
         await touchBotHeartbeat(sb);
         await manager.heartbeat();
+        await queue.requeueStale(); // reclaim rows abandoned mid-send by a crash
       } catch (e) {
         console.error("[bot] heartbeat:", e.message);
       }
@@ -131,6 +162,7 @@ async function main() {
           ok: true,
           uptime_s: Math.round((Date.now() - startedAt.getTime()) / 1000),
           sessions: [...manager.socks.keys()],
+          connected_sessions: [...manager.socks.keys()].filter((id) => manager.isConnected(id)),
           stats,
         })
       );

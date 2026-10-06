@@ -17,7 +17,7 @@ import { WhatsAppTestPanel } from "@/components/app/whatsapp/test-panel";
 import { timeAgo } from "@/components/app/whatsapp/shared";
 
 interface Overview {
-  accounts: { total: number; connected: number; connecting: number; enabled: number };
+  accounts: { total: number; connected: number; stale_connected: number; connecting: number; enabled: number };
   counts: { pending: number; processing: number; retrying: number; failed: number; sent: number; cancelled: number };
   paused: boolean;
   failover_enabled: boolean;
@@ -82,8 +82,13 @@ export default function WhatsAppAdminPage() {
           {data?.bot_online ? "Bot online" : data?.bot_last_seen_at ? `Bot offline (seen ${timeAgo(data.bot_last_seen_at)})` : "Bot offline"}
         </Badge>
         <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700">
-          {data?.accounts.connected ?? 0}/{data?.accounts.total ?? 0} connected
+          {data?.accounts.connected ?? 0}/{data?.accounts.total ?? 0} live sessions
         </Badge>
+        {data?.accounts.stale_connected ? (
+          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+            {data.accounts.stale_connected} stale (bot offline)
+          </Badge>
+        ) : null}
         {data?.paused ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">PAUSED</Badge> : null}
         {counts ? (
           <>

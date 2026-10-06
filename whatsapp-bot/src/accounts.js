@@ -28,9 +28,22 @@ const {
 
 const QRCode = require("qrcode");
 const qrcodeTerminal = require("qrcode-terminal");
-const { updateAccount, writeInboxMessage } = require("./store");
-const { isTransientBaileysError, parseIncomingMessage } = require("./lib");
+const { updateAccount, writeInboxMessage, markDeliveryProgress } = require("./store");
+const { isTransientBaileysError, parseIncomingMessage, recipientNotOnWhatsApp, withTimeout } = require("./lib");
 const { createBotLogger } = require("./logger");
+
+// Hard ceiling for one sendMessage attempt. Baileys' promise can hang forever
+// on a half-dead WebSocket — without this the queue row would sit in
+// "processing" forever while the recipient never receives anything.
+const SEND_TIMEOUT_MS = Number(process.env.WHATSAPP_SEND_TIMEOUT_MS) || 45 * 1000;
+
+/**
+ * Baileys message-status acks (WebMessageInfo.Status):
+ *  1 PENDING, 2 SERVER_ACK (WhatsApp server accepted = SENT),
+ *  3 DELIVERY_ACK (recipient device received = DELIVERED), 4 READ, 5 PLAYED.
+ * Only ever bumps FORWARD — a late lower ack never downgrades a row.
+ */
+const ACK_STATUS = { 2: "SENT", 3: "DELIVERED", 4: "READ", 5: "READ" };
 
 // Deduped Baileys logger: transient internal errors (e.g. "unexpected error
 // in 'init queries'" with statusCode 408 on slow networks) are non-fatal —
@@ -128,6 +141,29 @@ class AccountManager {
       this.socks.set(account.id, { sock, reconnectTimer: null, reconnectAttempt: attempt, starting: false });
 
       sock.ev.on("creds.update", saveCreds);
+      // Delivery-ack listener (requirement: distinguish SEND_ACCEPTED / SENT /
+      // DELIVERED instead of pretending "sent" = "landed on the phone")
+      // Fire-and-forget by design — a logging hiccup must never disturb the
+      // live WhatsApp session.
+      sock.ev.on("messages.update", (updates) => {
+        const live = this.socks.get(account.id);
+        if (!live || live.sock !== sock) return; // stale event from a superseded socket
+        if (!Array.isArray(updates)) return;
+        for (const u of updates) {
+          try {
+            const waId = u?.key?.id;
+            const status = ACK_STATUS[u?.update?.status];
+            if (!waId || !status) continue;
+            markDeliveryProgress(this.sb, waId, status)
+              .then((bumped) => {
+                if (bumped) console.log(`[WA] Delivery ack: ${waId.slice(0, 12)}… -> ${status}`);
+              })
+              .catch((e) => console.error("[WA] delivery ack write failed:", e.message));
+          } catch (e) {
+            console.error("[WA] delivery ack parse error:", e.message);
+          }
+        }
+      });
       // Incoming message capture. Fire-and-forget by design: parsing or DB
       // failures here are logged and swallowed — they must NEVER throw into
       // the socket, crash the bot or disturb the WhatsApp session. Only
@@ -392,12 +428,53 @@ class AccountManager {
     return Object.values(groups ?? {}).map((g) => ({ id: g.id, name: g.subject }));
   }
 
+  /**
+   * Send text through a REAL connected session and return hard evidence.
+   *
+   * Delivery contract:
+   *  1. the socket must be genuinely open (sock.user present)
+   *  2. direct-chat recipients are verified on WhatsApp first (onWhatsApp);
+   *     a number with no WhatsApp account fails immediately as NON-RETRYABLE
+   *     — the message would otherwise silently vanish while everything in the
+   *     database looks green
+   *  3. sendMessage races a hard timeout — a zombie socket rejects instead of
+   *     hanging forever
+   *  4. ONLY a resolved sendMessage counts as sent; the returned WhatsApp
+   *     message id is handed back to the caller for the queue/log evidence
+   */
   async sendText(accountId, jid, text) {
     const sock = this.getConnected(accountId);
     if (!sock) throw new Error("Account is not connected.");
-    const result = await sock.sendMessage(jid, { text });
-    // only a resolved Baileys promise counts as "sent"
-    return !!result;
+    if (!sock.user) throw new Error("WhatsApp session is not authenticated.");
+
+    console.log(`[WA] Session state: open (${accountId})`);
+    console.log(`[WA] Recipient JID: ${jid}`);
+
+    // ---- recipient existence check (direct chats only) ----
+    if (!String(jid).endsWith("@g.us")) {
+      try {
+        const found = await withTimeout(sock.onWhatsApp(jid), 15000, "onWhatsApp");
+        const exists = Array.isArray(found) && found.some((r) => r?.exists === true || r?.jid === jid);
+        console.log(`[WA] Recipient on WhatsApp: ${exists ? "yes" : "NO"}`);
+        if (!exists) throw recipientNotOnWhatsApp(String(jid).split("@")[0]);
+      } catch (e) {
+        // A DEFINITIVE no means the number cannot receive anything: fail fast,
+        // no retries. An onWhatsApp CHECK failure (network/timeout) must not
+        // block the send — the send itself remains the source of truth.
+        if (e?.nonRetryable) throw e;
+        console.warn(`[WA] onWhatsApp check unavailable, continuing with send: ${e.message}`);
+      }
+    }
+
+    console.log("[WA] Sending message…");
+    const result = await withTimeout(sock.sendMessage(jid, { text }), SEND_TIMEOUT_MS, `send to ${jid}`);
+    const waMessageId = result?.key?.id ?? null;
+    if (!result) {
+      // sendMessage resolving with nothing is not evidence of a send
+      throw new Error("WhatsApp send returned no confirmation (no message key) — treating as failed.");
+    }
+    console.log(`[WA] WhatsApp send accepted: ${waMessageId ?? "<no id returned>"}`);
+    return { waMessageId };
   }
 
   async shutdown() {

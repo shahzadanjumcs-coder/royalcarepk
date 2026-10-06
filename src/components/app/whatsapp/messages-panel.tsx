@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoadingRows, EmptyState } from "@/components/app/states";
-import { WAMessageStatusBadge, WANotificationTypeBadge, formatDateTime, prettyPhone } from "./shared";
+import { WAMessageStatusBadge, WADeliveryBadge, WANotificationTypeBadge, formatDateTime, prettyPhone } from "./shared";
 import type { WhatsAppMessageLog, WhatsAppQueueItem } from "@/lib/types";
 import { RotateCcw, Ban, Search, History, ChevronDown } from "lucide-react";
 
@@ -137,6 +137,7 @@ export function WhatsAppMessagesPanel() {
               <div className="flex flex-wrap items-center gap-2">
                 <WANotificationTypeBadge type={m.notification_type} />
                 <WAMessageStatusBadge status={m.status} />
+                {m.status === "sent" ? <WADeliveryBadge delivery={m.wa_delivery_status} /> : null}
                 <span className="text-sm font-medium">{m.order_number ?? "—"}</span>
                 <span className="text-xs text-muted-foreground">
                   to {m.recipient_kind === "group" ? m.recipient : prettyPhone(m.recipient)} · {m.recipient_kind}
@@ -144,6 +145,7 @@ export function WhatsAppMessagesPanel() {
                 <span className="ml-auto text-xs text-muted-foreground">
                   created {formatDateTime(m.created_at)}
                   {m.sent_at ? ` · sent ${formatDateTime(m.sent_at)}` : ""}
+                  {m.delivered_at ? ` · delivered ${formatDateTime(m.delivered_at)}` : ""}
                 </span>
               </div>
 
@@ -218,6 +220,13 @@ function MessageDetailsDialog({ item, onClose }: { item: WhatsAppQueueItem | nul
         </DialogHeader>
         <div className="max-h-80 space-y-2 overflow-y-auto">
           <p className="whitespace-pre-line rounded-md bg-muted/50 p-3 text-sm">{item?.message}</p>
+          {item?.status === "sent" ? (
+            <p className="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
+              <span className="font-medium">WhatsApp evidence:</span> {item.wa_message_id ? `message id ${item.wa_message_id}` : "no message id recorded"}
+              {item.wa_delivery_status ? ` · ack ${item.wa_delivery_status}` : " · no device ack yet"}
+              {item.delivered_at ? ` · delivered ${formatDateTime(item.delivered_at)}` : ""}
+            </p>
+          ) : null}
           {(data?.rows ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground">No delivery attempts recorded yet.</p>
           ) : (
@@ -226,6 +235,9 @@ function MessageDetailsDialog({ item, onClose }: { item: WhatsAppQueueItem | nul
                 <span className="font-medium">#{log.attempt}</span>
                 <WAMessageStatusBadge status={log.status} />
                 <span className="text-xs text-muted-foreground">{formatDateTime(log.created_at)}</span>
+                {log.wa_message_id ? (
+                  <span className="text-xs text-muted-foreground">wa_id: {log.wa_message_id}</span>
+                ) : null}
                 {log.error ? <span className="ml-auto max-w-[60%] text-right text-xs text-rose-600">{log.error}</span> : null}
               </div>
             ))

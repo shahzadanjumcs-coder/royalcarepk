@@ -39,6 +39,8 @@ export function WhatsAppAccountsPanel() {
   const [qrAccount, setQrAccount] = useState<WhatsAppAccount | null>(null);
 
   const accounts = data?.rows ?? [];
+  /** A session only counts as usable when the bot heartbeat is fresh (session_live). */
+  const isLive = (a: WhatsAppAccount) => a.session_live === true;
   const anyConnecting = accounts.some((a) => a.status === "connecting");
 
   // poll faster while a QR pairing is in progress so the QR appears promptly
@@ -148,8 +150,15 @@ export function WhatsAppAccountsPanel() {
                     </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">{prettyPhone(a.phone)}</p>
                   </div>
-                  <WAConnectionBadge status={a.status} />
+                  <WAConnectionBadge status={a.status} live={a.session_live} />
                 </div>
+
+                {a.status === "connected" && !isLive(a) ? (
+                  <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-700">
+                    The database shows connected, but the bot has not reported this session recently — the bot process is
+                    likely down. Start the bot, then press Reconnect if it does not recover on its own.
+                  </p>
+                ) : null}
 
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p>
@@ -167,7 +176,7 @@ export function WhatsAppAccountsPanel() {
                 ) : null}
 
                 <div className="mt-auto flex flex-wrap gap-2 pt-1">
-                  {a.status !== "connected" ? (
+                  {!isLive(a) ? (
                     <Button
                       size="sm"
                       variant={a.status === "disconnected" ? "default" : "outline"}
@@ -182,7 +191,7 @@ export function WhatsAppAccountsPanel() {
                       <RefreshCw className="mr-2 h-4 w-4" /> Reconnect
                     </Button>
                   )}
-                  {a.status === "connected" ? (
+                  {isLive(a) ? (
                     <Button
                       size="sm"
                       variant="outline"

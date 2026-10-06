@@ -63,6 +63,43 @@ function computeBackoffMs(retryCount) {
   return Math.min(30000 * Math.pow(2, Math.max(0, retryCount)), 10 * 60 * 1000);
 }
 
+/**
+ * Rejects a non-retryable send failure (e.g. the recipient number has no
+ * WhatsApp account). Retrying can never succeed until a human fixes the
+ * number, so the queue marks these FAILED immediately instead of burning
+ * retries — an admin can still retry manually from the panel.
+ */
+function recipientNotOnWhatsApp(recipient) {
+  const err = new Error(
+    `Number is not available on WhatsApp${recipient ? ` (${recipient})` : ""} — verify the customer phone number.`
+  );
+  err.nonRetryable = true;
+  return err;
+}
+
+/**
+ * Race a promise against a hard timeout. Baileys' sendMessage can hang
+ * indefinitely on a half-dead WebSocket (phone offline, network drop the
+ * keepalive has not noticed yet) — without this the queue row would sit in
+ * "processing" forever and the message would silently never arrive.
+ * The timer is always cleared; the losing promise's result/error is ignored.
+ */
+function withTimeout(promise, ms, label) {
+  let timer = null;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const err = new Error(`WhatsApp send timed out after ${Math.round(ms / 1000)}s${label ? ` (${label})` : ""} — connection may be stale; will retry.`);
+        err.timedOut = true;
+        reject(err);
+      }, Math.max(1, ms));
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 /** Test messages must never look like real order notifications. */
 function prefixTestMessage(message) {
   const text = String(message ?? "");
@@ -176,6 +213,8 @@ module.exports = {
   prefixTestMessage,
   isGroupJid,
   isTransientBaileysError,
+  recipientNotOnWhatsApp,
+  withTimeout,
   parseIncomingMessage,
   jidPhone,
   sleep,

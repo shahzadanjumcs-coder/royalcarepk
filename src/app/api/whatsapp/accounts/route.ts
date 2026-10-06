@@ -1,5 +1,6 @@
 import { ok, fail, withAuth, GENERIC_ERROR } from "@/lib/api/helpers";
 import { store } from "@/lib/store";
+import { isAccountSessionLive } from "@/lib/services/whatsapp";
 import type { WhatsAppAccount } from "@/lib/types";
 
 /**
@@ -8,13 +9,20 @@ import type { WhatsAppAccount } from "@/lib/types";
  *
  * Session credentials NEVER live here — only metadata. The QR pairing session
  * storage stays on the bot host; this API just registers the account row.
+ *
+ * Each row carries a server-computed `session_live` flag: DB status says
+ * "connected" AND the bot's per-account heartbeat is fresh. A stale row
+ * (bot process dead) must never be presented to the admin as connected.
  */
 export const GET = withAuth(["super_admin", "admin"], async () => {
   const { rows } = await store.list<WhatsAppAccount>("whatsapp_accounts", {
     orderBy: { field: "created_at", dir: "asc" },
     perPage: 100,
   });
-  return ok({ rows });
+  const nowMs = Date.now();
+  return ok({
+    rows: rows.map((a) => ({ ...a, session_live: isAccountSessionLive(a, nowMs) })),
+  });
 });
 
 export const POST = withAuth(["super_admin", "admin"], async (_session, req) => {

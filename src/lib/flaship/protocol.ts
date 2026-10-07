@@ -528,6 +528,30 @@ export function filterPickupsForCourier<T extends { pickup_id: string }>(
   return pickups.filter((p) => mapped.has(p.pickup_id));
 }
 
+// ---------------- Pickup↔courier mapping UI helpers ----------------
+
+/**
+ * Group pickup→courier links by pickup id (courier ids in first-seen order).
+ * Pure helper for the pickup-points admin UI: for every synced pickup it
+ * answers "which couriers is this pickup enabled for on the Flaship side
+ * (merchant_pickup_couriers)?" — the mapping that decides whether a booking
+ * with this pickup would be accepted or rejected with
+ * "Pickup is not synced to this courier".
+ */
+export function couriersByPickup(links: PickupCourierLink[]): Map<string, string[]> {
+  const byPickup = new Map<string, string[]>();
+  for (const l of links) {
+    if (!l.pickup_id || !l.courier_id) continue;
+    const list = byPickup.get(l.pickup_id);
+    if (list) {
+      if (!list.includes(l.courier_id)) list.push(l.courier_id);
+    } else {
+      byPickup.set(l.pickup_id, [l.courier_id]);
+    }
+  }
+  return byPickup;
+}
+
 // ---------------- Error message extraction (DRF-style bodies) ----------------
 
 /**

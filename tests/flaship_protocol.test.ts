@@ -17,6 +17,7 @@ import {
   extractCatalog,
   isPairMapped,
   filterPickupsForCourier,
+  couriersByPickup,
   extractApiErrorMessage,
   normalizePkPhone,
   type PickupCourierLink,
@@ -337,5 +338,33 @@ describe("extractApiErrorMessage — field-level (DRF) error bodies", () => {
   it("parses JSON-string bodies", () => {
     const raw = JSON.stringify({ pickup_id: "Pickup is not synced to this courier." });
     expect(extractApiErrorMessage(raw, 400)).toBe("pickup_id: Pickup is not synced to this courier.");
+  });
+});
+
+// ---------------------------------------------------------------
+// 6. Pickup-points mapping UI helper
+// ---------------------------------------------------------------
+describe("couriersByPickup — pickup-points mapping UI grouping", () => {
+  const links: PickupCourierLink[] = [
+    { pickup_id: "PK-9012", courier_id: "Leopard" },
+    { pickup_id: "PK-9012", courier_id: "M&P" },
+    { pickup_id: "PK-9012", courier_id: "Leopard" }, // duplicate edge — ignored
+    { pickup_id: "PK-7777", courier_id: "TCS" },
+    { pickup_id: "", courier_id: "Leopard" }, // malformed edge — skipped
+  ];
+
+  it("groups courier ids per pickup in first-seen order and dedupes", () => {
+    const m = couriersByPickup(links);
+    expect(m.get("PK-9012")).toEqual(["Leopard", "M&P"]);
+    expect(m.get("PK-7777")).toEqual(["TCS"]);
+  });
+
+  it("returns an empty map for empty mapping data (mapping not synced yet)", () => {
+    expect(couriersByPickup([]).size).toBe(0);
+  });
+
+  it("never invents a mapping for a pickup that has no edges", () => {
+    const m = couriersByPickup(links);
+    expect(m.has("PK-0000")).toBe(false);
   });
 });

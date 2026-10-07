@@ -410,11 +410,15 @@ export async function syncCatalog(
   }
 
   // Persist the pickup↔courier mapping (Flaship's merchant_pickup_couriers) so
-  // the booking UI offers only pairs Flaship accepts. Full refresh: edges
+  // the booking UI offers only pairs Flaship accepts. Every live sync entry
+  // point (couriers / cities / pickups / all) refreshes it: the /catalog/
+  // response is fetched and parsed as a whole, so the links are complete no
+  // matter which type the caller asked for — syncing from the pickup-points
+  // page therefore also refreshes the courier mapping. Full refresh: edges
   // absent from the fresh catalog are removed — but ONLY when the fresh
   // catalog actually reported links, so an unrecognized response shape never
   // wipes existing mapping data.
-  if ((type === "all" || type === "couriers") && cfg.mode === "live" && catalog.links.length) {
+  if (cfg.mode === "live" && catalog.links.length) {
     await store.upsertMany(
       "flaship_pickup_couriers",
       catalog.links.map((l) => ({ pickup_id: l.pickup_id, courier_id: l.courier_id, synced_at: now })),

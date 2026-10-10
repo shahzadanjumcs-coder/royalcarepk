@@ -7,6 +7,8 @@ export default function StockOutPage() {
       description="Remove stock for damage, loss or internal use — deducted from on-hand quantity"
       type="STOCK_OUT"
       quantityLabel="Quantity going out"
+      quantitySign={-1}
+      quantityFixedPositive={false}
     />
   );
 }

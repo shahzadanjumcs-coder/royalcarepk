@@ -387,3 +387,128 @@ describe("bookOrderWithFlaship — POST /bookings/ transport contract", () => {
     expect(updateCalls).toHaveLength(0); // no booking-state writes
   });
 });
+
+// ================================================================
+// D. Mapping degradation, rejection handling & booking idempotency
+//    (Phase 1 regressions — empty mapping must NOT block booking,
+//    Flaship rejection must never mark an order booked, retries
+//    must not create duplicate CNs)
+// ================================================================
+
+describe("bookOrderWithFlaship — mapping degradation, rejection & idempotency", () => {
+  it("books successfully when NO mapping data exists (graceful degradation — Leopard/TCS success mode)", async () => {
+    seedHappyPath();
+    tables.flaship_pickup_couriers = []; // pair count 0 — the production symptom
+    const result = await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
+
+    expect(fetchCalls).toHaveLength(1); // request went to Flaship — final validator
+    expect(fetchCalls[0].url).toBe("https://partners.flaship.pk/api/integration/bookings/");
+    expect(result.trackingNumber).toBe("FLP123456789");
+    expect(updateCalls.some((u) => u.patch.booking_status === "booked")).toBe(true);
+  });
+
+  it("marks the order failed (never booked) and keeps the sanitized Flaship error on rejection", async () => {
+    seedHappyPath();
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ pickup_id: ["Pickup is not synced to this courier (missing merchant_pickup_couriers.external_ref)."] }),
+        { status: 400 }
+      )) as unknown as typeof fetch;
+
+    let error: unknown = null;
+    try {
+      await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(FlashipError);
+    expect((error as Error).message).toContain("merchant_pickup_couriers.external_ref");
+    // the order is NEVER marked booked — no CN, no shipment row
+    expect(updateCalls.some((u) => u.patch.booking_status === "booked")).toBe(false);
+    const failed = updateCalls.find((u) => u.patch.booking_status === "failed");
+    expect(failed).toBeDefined();
+    expect(failed!.patch.booking_error as string).toContain("merchant_pickup_couriers");
+    expect(insertCalls.filter((i) => i.table === "shipments")).toHaveLength(0);
+  });
+
+  it("blocks duplicate booking of an already-booked order BEFORE any request", async () => {
+    seedHappyPath();
+    tables.orders = [{ ...(tables.orders[0] as Row), tracking_number: "CN-EXISTING", booking_status: "booked" }];
+
+    let error: unknown = null;
+    try {
+      await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(FlashipError);
+    expect((error as Error).message).toContain("already booked");
+    expect(fetchCalls).toHaveLength(0);
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it("blocks a concurrent second booking while another attempt is in flight (pending guard)", async () => {
+    seedHappyPath();
+    tables.orders = [
+      { ...(tables.orders[0] as Row), booking_status: "pending", updated_at: new Date().toISOString() },
+    ];
+
+    let error: unknown = null;
+    try {
+      await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(FlashipError);
+    expect((error as Error).message).toContain("already in progress");
+    expect(fetchCalls).toHaveLength(0); // no second Flaship POST → no duplicate CN
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it("allows a retry when a pending booking is stale (crashed attempt recovery)", async () => {
+    seedHappyPath();
+    tables.orders = [
+      {
+        ...(tables.orders[0] as Row),
+        booking_status: "pending",
+        updated_at: new Date(Date.now() - 10 * 60_000).toISOString(), // 10 min ago — cannot be in flight
+      },
+    ];
+
+    const result = await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(result.trackingNumber).toBe("FLP123456789");
+    expect(updateCalls.some((u) => u.patch.booking_status === "booked")).toBe(true);
+  });
+
+  it("simulator mode books locally without any network call", async () => {
+    seedHappyPath();
+    (tables.settings![0] as Row).value = { mode: "simulator", default_courier: "Leopard", default_pickup: "PK-9012" };
+
+    const result = await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
+
+    expect(fetchCalls).toHaveLength(0); // never touches Flaship
+    expect(result.trackingNumber).toMatch(/^FLP\d{10}$/); // local simulated CN
+    expect(updateCalls.some((u) => u.patch.booking_status === "booked")).toBe(true);
+  });
+});
+
+describe("bookOrderWithFlaship — latest saved data contract (Phase 6)", () => {
+  it("sends the LATEST saved order delivery address and city, not stale copies", async () => {
+    seedHappyPath();
+    // the admin/worker edited the order AFTER creation — the booking must use
+    // the order's CURRENT delivery_address, never an earlier snapshot
+    tables.orders = [{ ...(tables.orders[0] as Row), delivery_address: "Fresh Address 99, DHA Phase 6", city: "Karachi" }];
+    await bookOrderWithFlaship({ userId: "u-admin", role: "super_admin" } as never, "o1");
+    const body = JSON.parse(String(fetchCalls[0].init.body));
+    expect(body.consignee_address).toBe("Fresh Address 99, DHA Phase 6");
+    expect(body.consignee_city).toBe("Karachi");
+    // consignee identity comes from the customer master record at booking time
+    expect(body.consignee_name).toBe("Ahmed Raza");
+    expect(body.consignee_phone_primary).toBe("03001234567");
+  });
+});

@@ -1,6 +1,8 @@
 import { ok, fail, withAuth, GENERIC_ERROR } from "@/lib/api/helpers";
 import { store } from "@/lib/store";
+import { adminUpdateOrder, workerUpdateOrderDelivery, OrderError, type AdminOrderUpdateInput } from "@/lib/services/orders";
 import type { Order } from "@/lib/types";
+import { z } from "zod";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -41,27 +43,73 @@ export const GET = withAuth("any", async (session, _req, ctx) => {
   });
 });
 
-export const PATCH = withAuth(["super_admin", "admin"], async (session, req, ctx) => {
+const patchSchema = z.object({
+  customer_id: z.string().min(1).optional(),
+  delivery_address: z.string().optional(),
+  city: z.string().optional(),
+  notes: z.string().nullable().optional(),
+  discount: z.number().nonnegative().optional(),
+  cod_amount: z.number().nonnegative().optional(),
+  items: z
+    .array(
+      z.object({
+        product_id: z.string().min(1),
+        quantity: z.number().positive(),
+        unit_price: z.number().nonnegative().optional(),
+      })
+    )
+    .min(1)
+    .optional(),
+});
+
+/**
+ * PATCH /api/orders/[id] — order editing.
+ *
+ * Admins/super admins: full edit via adminUpdateOrder (server-authoritative):
+ * - totals are ALWAYS recomputed from the validated items — no client
+ *   subtotal/total is accepted;
+ * - closed orders are rejected; booked orders accept notes-only edits
+ *   (the Flaship Integration API has no shipment-amendment endpoint —
+ *   the honest path for booked orders is cancel + rebook);
+ * - stock reservations follow the item diff with upfront availability
+ *   validation (no partial reservations);
+ * - every edit is written to the audit log.
+ *
+ * Workers (Phase 6): may correct ONLY the delivery address, city and notes
+ * of their OWN unbooked orders — never prices, items, the customer link or
+ * the customer master record. Enforced here AND in the service.
+ */
+const WORKER_EDITABLE_FIELDS = ["delivery_address", "city", "notes"];
+const workerPatchSchema = z.object({
+  delivery_address: z.string().min(1).optional(),
+  city: z.string().min(1).optional(),
+  notes: z.string().nullable().optional(),
+});
+
+export const PATCH = withAuth(["super_admin", "admin", "worker"], async (session, req, ctx) => {
   try {
     const { id } = await (ctx as unknown as Ctx).params;
-    const body = (await req.json()) as Partial<{ delivery_address: string; city: string; notes: string; cod_amount: number }>;
-    const order = await store.get<Order>("orders", id);
-    if (!order) return fail("Order not found.", 404);
-    if (["DELIVERED", "RETURNED", "CANCELLED"].includes(order.status)) {
-      return fail("Closed orders cannot be edited.", 422);
+    const body = (await req.json()) as Record<string, unknown>;
+
+    if (session.role === "worker") {
+      const attempted = Object.keys(body).filter((k) => !WORKER_EDITABLE_FIELDS.includes(k));
+      if (attempted.length) {
+        return fail("Workers can only edit the delivery address, city and notes of their own orders.", 403);
+      }
+      const parsed = workerPatchSchema.safeParse(body);
+      if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Invalid order data.", 422);
+      const order = await workerUpdateOrderDelivery(session, id, parsed.data);
+      return ok({ success: true, order });
     }
-    await store.update("orders", id, {
-      delivery_address: body.delivery_address ?? order.delivery_address,
-      city: body.city ?? order.city,
-      notes: body.notes ?? order.notes,
-      cod_amount: body.cod_amount ?? order.cod_amount,
-    });
-    await store.insert("audit_logs", {
-      user_id: session.userId, user_name: session.name, action: "order.updated",
-      entity: "orders", entity_id: id, old_data: { status: order.status }, new_data: body as Record<string, unknown>,
-    });
-    return ok({ success: true });
+
+    const parsed = patchSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(parsed.error.issues[0]?.message ?? "Invalid order data.", 422);
+    }
+    const order = await adminUpdateOrder(session, id, parsed.data as AdminOrderUpdateInput);
+    return ok({ success: true, order });
   } catch (e) {
+    if (e instanceof OrderError) return fail(e.message, 422);
     console.error("[orders.PATCH]", e);
     return fail(GENERIC_ERROR, 500);
   }

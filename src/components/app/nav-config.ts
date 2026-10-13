@@ -57,6 +57,7 @@ export const ADMIN_NAV: NavSection[] = [
     title: "Inventory",
     items: [
       { label: "Products", href: "/admin/products", icon: Boxes },
+      { label: "Deals & Bundles", href: "/admin/deals", icon: PercentCircle },
       { label: "Categories", href: "/admin/categories", icon: Tags },
       { label: "Current Stock", href: "/admin/inventory", icon: Landmark },
       { label: "Stock In", href: "/admin/inventory/stock-in", icon: ArrowDownToLine },

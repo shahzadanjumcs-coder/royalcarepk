@@ -9,6 +9,7 @@ import { PageHeader, PageSpinner, ErrorState } from "@/components/app/states";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { OrderStatusBadge, BookingStatusBadge, CommissionTypeBadge, ApprovalStatusBadge } from "@/components/app/badges";
 import { ApprovalActions } from "@/components/app/approval-actions";
+import { AdminOrderEditDialog } from "@/components/app/admin-order-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,6 +25,7 @@ import {
   CheckCheck,
   Loader2,
   MapPin,
+  Pencil,
   RefreshCw,
   Send,
   UserPlus,
@@ -75,6 +77,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     couriers: { id: string; courier_id: string; name: string }[];
     pickups: { id: string; pickup_id: string; name: string }[];
     pickup_couriers?: { pickup_id: string; courier_id: string }[];
+    customers: { id: string; name: string; phone: string }[];
+    products: { id: string; name: string; sku: string; selling_price: number; available_stock: number }[];
   }>("/api/lookup");
 
   const [statusNote, setStatusNote] = useState("");
@@ -85,6 +89,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [pickup, setPickup] = useState("");
   const [workerId, setWorkerId] = useState("");
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const { session } = useSession();
 
   // Only pickup locations actually mapped to the selected courier (Flaship's
@@ -361,6 +366,32 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <p className="text-sm text-muted-foreground">This order is closed — no further status changes.</p>
               )}
 
+              {/* Edit order (pre-booking only — server enforces the same rule) */}
+              {!data ? null : ["DELIVERED", "RETURNED", "CANCELLED"].includes(order.status) ? null : order.tracking_number || order.booking_status === "booked" || order.booking_status === "pending" ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <p className="text-sm font-medium text-amber-900">Order already booked{order.tracking_number ? ` (CN ${order.tracking_number})` : ""}</p>
+                  <p className="mt-1 text-xs text-amber-800">
+                    The Flaship Integration API has no shipment-amendment endpoint, so items, prices and the delivery
+                    address can no longer be edited here — the courier label keeps the data it was booked with. To change
+                    them: cancel this order and create a corrected rebooking.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border p-3">
+                  <p className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <Pencil className="h-4 w-4 text-muted-foreground" /> Edit order
+                  </p>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Correct the customer, items, quantities, prices, discount, COD amount or the delivery address before
+                    courier booking. Totals are recalculated by the server; stock reservations follow the changed
+                    quantities.
+                  </p>
+                  <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Open editor
+                  </Button>
+                </div>
+              )}
+
               {/* Danger zone — cancelled-order removal (super_admin only, test cleanup) */}
               {session?.role === "super_admin" && order.status === "CANCELLED" ? (
                 <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3">
@@ -535,6 +566,29 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         destructive
         onConfirm={deleteOrder}
       />
+
+      {data ? (
+        <AdminOrderEditDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          order={{
+            id: order.id,
+            order_number: order.order_number,
+            customer_id: order.customer_id,
+            delivery_address: order.delivery_address,
+            city: order.city,
+            notes: order.notes,
+            discount: Number(order.discount),
+            cod_amount: Number(order.cod_amount),
+            status: order.status,
+            booking_status: order.booking_status,
+            tracking_number: order.tracking_number,
+          }}
+          items={items}
+          lookup={lookup ?? null}
+          onSaved={refresh}
+        />
+      ) : null}
     </div>
   );
 }

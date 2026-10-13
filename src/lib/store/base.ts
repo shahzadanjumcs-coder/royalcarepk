@@ -12,6 +12,8 @@ export type TableName =
   | "categories"
   | "suppliers"
   | "products"
+  | "deals"
+  | "deal_items"
   | "orders"
   | "order_items"
   | "order_status_history"

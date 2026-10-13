@@ -105,11 +105,11 @@ const CATALOG_BODY = {
 
 let fetchCalls = 0;
 const originalFetch = globalThis.fetch;
-function stubFetchWithCatalog() {
+function stubFetchWithCatalog(body: unknown = CATALOG_BODY) {
   fetchCalls = 0;
   globalThis.fetch = (async () => {
     fetchCalls += 1;
-    return new Response(JSON.stringify(CATALOG_BODY), { status: 200 });
+    return new Response(JSON.stringify(body), { status: 200 });
   }) as unknown as typeof fetch;
 }
 
@@ -173,5 +173,46 @@ describe("syncCatalog — pickup↔courier mapping persistence", () => {
 
     expect(counts.links).toBe(1);
     expect(mutations.some((m) => m.kind === "upsertMany" && m.table === "flaship_pickup_couriers")).toBe(true);
+  });
+
+  it("never wipes existing mapping rows when a fresh live catalog reports NO links (safety property)", async () => {
+    // Production safety: a live response without recognizable mapping data
+    // (e.g. companies[] with empty per-company pickup lists) must not delete
+    // the previously synced edges — empty extraction persists AND wipes nothing.
+    seed("settings", { id: "s1", key: "flaship", value: { mode: "live", api_key_enc: "enc" } });
+    seed("flaship_pickup_couriers", { id: "m-keep", pickup_id: "PK-9012", courier_id: "Leopard" });
+    stubFetchWithCatalog({
+      companies: [{ code: "Leopard", display_name: "Leopard Courier", pickups: [] }],
+      pickupAddress: [{ id: "PK-9012", name: "Royalcarepk Okara", address: "Depot Road, Okara", city: "Okara" }],
+      operational_cities: ["Okara", "Lahore"],
+    });
+
+    const counts = await syncCatalog("pickups");
+
+    expect(counts.links).toBe(0);
+    expect(mutations.filter((m) => m.table === "flaship_pickup_couriers")).toHaveLength(0);
+    expect(tableRows.flaship_pickup_couriers).toEqual([{ id: "m-keep", pickup_id: "PK-9012", courier_id: "Leopard" }]);
+  });
+
+  it("returns shape diagnostics describing what the live response contained", async () => {
+    seed("settings", { id: "s1", key: "flaship", value: { mode: "live", api_key_enc: "enc" } });
+    stubFetchWithCatalog();
+
+    const counts = await syncCatalog("pickups");
+
+    expect(counts.diagnostics).not.toBeNull();
+    expect(counts.diagnostics!.companies).toBe(2);
+    expect(counts.diagnostics!.pickupAddress).toBe(1);
+    expect(counts.diagnostics!.extractedLinks).toBe(1);
+    expect(counts.diagnostics!.keys).toContain("companies");
+    expect(counts.diagnostics!.keys).toContain("pickupAddress");
+  });
+
+  it("returns null diagnostics outside live mode (simulator)", async () => {
+    seed("settings", { id: "s1", key: "flaship", value: { mode: "simulator" } });
+
+    const counts = await syncCatalog("pickups");
+
+    expect(counts.diagnostics).toBeNull();
   });
 });

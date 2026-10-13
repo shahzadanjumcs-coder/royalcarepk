@@ -38,6 +38,12 @@ export interface ResourceManagerProps<T extends { id: string }> {
   onUpdate?: (row: T, values: FormValues) => Promise<void>;
   /** override default delete (return a message to show nothing) */
   onDelete?: (row: T) => Promise<string | void>;
+  /** row-aware delete dialog title (defaults to the generic text) */
+  deleteTitle?: string | ((row: T) => string);
+  /** row-aware delete dialog description (defaults to the generic text) */
+  deleteDescription?: string | ((row: T) => string);
+  /** extra per-row menu actions (e.g. archive/restore toggles) */
+  extraActions?: (row: T) => React.ReactNode;
 }
 
 export function ResourceManager<T extends { id: string }>(props: ResourceManagerProps<T>) {
@@ -45,7 +51,7 @@ export function ResourceManager<T extends { id: string }>(props: ResourceManager
     title, description, endpoint, columns, fields, emptyTitle, emptyDescription,
     searchPlaceholder = "Search…", searchFields = [], mapRowToForm, transformSubmit,
     canCreate = true, canEdit = true, canDelete = true, createLabel, toolbar,
-    rowHref, mobileCard, onCreate, onUpdate, onDelete,
+    rowHref, mobileCard, onCreate, onUpdate, onDelete, deleteTitle, deleteDescription, extraActions,
   } = props;
 
   const router = useRouter();
@@ -119,6 +125,7 @@ export function ResourceManager<T extends { id: string }>(props: ResourceManager
                 <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
               </DropdownMenuItem>
             ) : null}
+            {extraActions?.(row) ?? null}
             {canDelete ? (
               <DropdownMenuItem className="text-rose-600 focus:text-rose-600" onClick={() => setDeleting(row)}>
                 <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
@@ -201,8 +208,8 @@ export function ResourceManager<T extends { id: string }>(props: ResourceManager
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title="Delete this record?"
-        description="This action cannot be undone. Records with history may be disabled instead of deleted."
+        title={deleting ? (typeof deleteTitle === "function" ? deleteTitle(deleting) : deleteTitle ?? "Delete this record?") : "Delete this record?"}
+        description={deleting ? (typeof deleteDescription === "function" ? deleteDescription(deleting) : deleteDescription ?? "This action cannot be undone. Records with history may be disabled instead of deleted.") : "This action cannot be undone. Records with history may be disabled instead of deleted."}
         confirmLabel="Delete"
         destructive
         onConfirm={confirmDelete}

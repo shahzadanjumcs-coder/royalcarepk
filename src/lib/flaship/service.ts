@@ -4,11 +4,13 @@ import type { FlashipCourier, FlashipCity, FlashipPickup, Order, OrderItem } fro
 import { decryptSecret } from "@/lib/crypto/secret-box";
 import {
   buildFlashipOrderPayload,
+  catalogResponseDiagnostics,
   extractApiErrorMessage,
   extractCatalog,
   findMissingBookingFields,
   isPairMapped,
   parseBookingResponse,
+  type CatalogDiagnostics,
   type ExtractedCatalog,
 } from "@/lib/flaship/protocol";
 import { logAudit, type Actor } from "@/lib/services/audit";
@@ -324,9 +326,10 @@ async function liveRequest<T>(
 /** Fetch + persist the catalog (couriers / cities / pickups + pickup↔courier mapping). */
 export async function syncCatalog(
   type: "couriers" | "cities" | "pickups" | "all"
-): Promise<{ couriers: number; cities: number; pickups: number; links: number }> {
+): Promise<{ couriers: number; cities: number; pickups: number; links: number; diagnostics: CatalogDiagnostics | null }> {
   const cfg = await getFlashipConfig();
   let catalog: ExtractedCatalog;
+  let diagnostics: CatalogDiagnostics | null = null;
 
   if (cfg.mode === "live") {
     const res = await liveRequest<unknown>(cfg, cfg.endpoints.catalog);
@@ -334,6 +337,10 @@ export async function syncCatalog(
     if (!catalog.couriers.length && !catalog.cities.length && !catalog.pickups.length) {
       throw new FlashipError("Flaship catalog response was empty. Verify the API key and base URL.");
     }
+    // Shape diagnostics: lets the admin see exactly which sections the live
+    // response contained when the courier-pickup pair count stays 0 — the
+    // honest way to identify missing Flaship-side configuration.
+    diagnostics = catalogResponseDiagnostics(res);
   } else {
     const [couriers, cities, pickups] = await Promise.all([
       simulateCatalog("couriers") as Promise<Record<string, unknown>[]>,
@@ -431,7 +438,7 @@ export async function syncCatalog(
     }
     counts.links = catalog.links.length;
   }
-  return counts;
+  return { ...counts, diagnostics };
 }
 
 export async function listCouriers(): Promise<FlashipCourier[]> {
@@ -456,9 +463,28 @@ export async function testFlashipConnection(): Promise<{ ok: boolean; message: s
   try {
     const res = await liveRequest<unknown>(cfg, cfg.endpoints.catalog);
     const catalog = extractCatalog(res);
+    const diagnostics = catalogResponseDiagnostics(res);
+    let message = `Connected. Catalog loaded: ${catalog.couriers.length} courier(s), ${catalog.cities.length} cit(ies), ${catalog.pickups.length} pickup location(s), ${catalog.links.length} courier-pickup link(s).`;
+    if (catalog.links.length === 0) {
+      // Honest diagnostics instead of a vague warning: report the shape so the
+      // merchant can tell "Flaship did not expose the mapping" apart from
+      // "nothing is enabled on the Flaship side".
+      const shape = [
+        diagnostics.companies !== null ? `companies(${diagnostics.companies})` : null,
+        diagnostics.couriers !== null ? `couriers(${diagnostics.couriers})` : null,
+        diagnostics.pickupAddress !== null ? `pickupAddress(${diagnostics.pickupAddress})` : null,
+        diagnostics.pickups !== null ? `pickups(${diagnostics.pickups})` : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      message +=
+        " No courier-pickup mapping is present in the catalog response" +
+        (shape ? ` (sections seen: ${shape})` : "") +
+        ". Booking still works — with no mapping stored, Flaship itself validates each booking. To have pairs reported here, enable couriers for your pickup locations in the Flaship merchant dashboard, then sync again.";
+    }
     return {
       ok: true,
-      message: `Connected. Catalog loaded: ${catalog.couriers.length} courier(s), ${catalog.cities.length} cit(ies), ${catalog.pickups.length} pickup location(s), ${catalog.links.length} courier-pickup link(s).`,
+      message,
       mode: "live",
     };
   } catch (e) {
@@ -509,6 +535,27 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
   }
   if (["DELIVERED", "RETURNED", "CANCELLED"].includes(order.status)) {
     throw new FlashipError(`Order ${order.order_number} is closed and cannot be booked.`);
+  }
+
+  // ---- concurrent-booking guard (double-click / parallel retry race) ----
+  // booking_status "pending" means another request is mid-flight between the
+  // pending write below and its final booked/failed write. Blocking it
+  // prevents two Flaship POSTs (two CNs) for the same order. Stale-pending
+  // recovery: if the pending stamp is older than the request could possibly
+  // be in flight (2× the configured timeout, floor 5 min — a crashed process
+  // never wrote its result), the retry is allowed instead of bricking the
+  // order. Orders whose pending row predates updated_at stamping are allowed
+  // through (legacy rows — no recency signal, previous behavior preserved).
+  if (order.booking_status === "pending") {
+    const cfgEarly = await getFlashipConfig();
+    const staleAfterMs = Math.max(5 * 60_000, 2 * (cfgEarly.timeout_ms || 30_000));
+    const stampedAt = order.updated_at ? new Date(order.updated_at).getTime() : 0;
+    const isInFlight = stampedAt > 0 && Date.now() - stampedAt < staleAfterMs;
+    if (isInFlight) {
+      throw new FlashipError(
+        `A booking attempt for order ${order.order_number} is already in progress. Wait a moment and retry — if it stays stuck for minutes, retrying is safe.`
+      );
+    }
   }
 
   const cfg = await getFlashipConfig();
@@ -572,8 +619,10 @@ export async function bookOrderWithFlaship(session: Actor | null, orderId: strin
     );
   }
 
-  // mark as pending so concurrent clicks don't double-book
-  await store.update("orders", orderId, { booking_status: "pending" });
+  // mark as pending so concurrent clicks don't double-book; updated_at is the
+  // recency stamp the concurrent-booking guard above reads (orders.updated_at
+  // has no DB trigger — it is stamped here explicitly, write-only metadata).
+  await store.update("orders", orderId, { booking_status: "pending", updated_at: new Date().toISOString() });
 
   try {
     let result: Record<string, unknown>;

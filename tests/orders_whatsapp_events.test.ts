@@ -26,6 +26,7 @@ const inventoryCalls = { release: 0, restore: 0, finalize: 0, reserve: 0 };
 const commissionCalls: string[] = [];
 
 mock.module("@/lib/services/inventory", () => ({
+  applyMovement: async () => undefined,
   reserveForOrder: async () => { inventoryCalls.reserve += 1; },
   finalizeForOrder: async () => { inventoryCalls.finalize += 1; },
   restoreForOrder: async () => { inventoryCalls.restore += 1; },

@@ -8,9 +8,12 @@ import { OrderStatusBadge, ApprovalStatusBadge, BookingStatusBadge } from "@/com
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import type { Order, OrderItem, OrderStatusHistory, Shipment, ShipmentTracking } from "@/lib/types";
-import { ArrowLeft, CheckCircle2, Clock, Loader2, RotateCcw, Truck, MapPin, Phone, XCircle, Package } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Loader2, Pencil, RotateCcw, Truck, MapPin, Phone, XCircle, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DetailData {
@@ -30,6 +33,10 @@ export default function WorkerOrderDetailPage({ params }: { params: Promise<{ id
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState({ delivery_address: "", city: "", notes: "" });
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   if (loading) return <PageSpinner />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
@@ -49,6 +56,39 @@ export default function WorkerOrderDetailPage({ params }: { params: Promise<{ id
       setErr(e instanceof ApiError ? e.message : "Update failed.");
     } finally {
       setBusy(null);
+    }
+  };
+
+  const isBooked = !!(order.tracking_number || order.booking_status === "booked" || order.booking_status === "pending");
+  const canEditDelivery = !isBooked && !["DELIVERED", "RETURNED", "CANCELLED"].includes(order.status);
+
+  const openEdit = () => {
+    setEditDraft({ delivery_address: order.delivery_address, city: order.city ?? "", notes: order.notes ?? "" });
+    setEditError(null);
+    setEditOpen(true);
+  };
+
+  const saveDelivery = async () => {
+    setEditError(null);
+    if (!editDraft.delivery_address.trim()) return setEditError("Delivery address is required.");
+    if (!editDraft.city.trim()) return setEditError("Delivery city is required.");
+    setEditBusy(true);
+    try {
+      await api(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        json: {
+          delivery_address: editDraft.delivery_address,
+          city: editDraft.city,
+          notes: editDraft.notes || null,
+        },
+      });
+      setEditOpen(false);
+      setMsg("Delivery details updated — the courier booking will use the saved address.");
+      refresh();
+    } catch (e) {
+      setEditError(e instanceof ApiError ? e.message : "Could not save the delivery details.");
+    } finally {
+      setEditBusy(false);
     }
   };
 
@@ -139,6 +179,11 @@ export default function WorkerOrderDetailPage({ params }: { params: Promise<{ id
             <p className="mt-0.5 text-sm text-muted-foreground">{order.delivery_address}</p>
             <p className="text-sm text-muted-foreground">{order.city}</p>
             {order.notes ? <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">📌 {order.notes}</p> : null}
+            {canEditDelivery ? (
+              <Button size="sm" variant="outline" className="mt-2" onClick={openEdit}>
+                <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit delivery details
+              </Button>
+            ) : null}
           </div>
           <a
             href={`tel:${order.customer_phone}`}
@@ -149,6 +194,42 @@ export default function WorkerOrderDetailPage({ params }: { params: Promise<{ id
           </a>
         </CardContent>
       </Card>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit delivery details</DialogTitle>
+            <DialogDescription>
+              Correct the address, city or notes before the courier booking is created. Prices and items are managed by
+              the admin team.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="mb-1.5 block">Delivery address *</Label>
+              <Input value={editDraft.delivery_address} onChange={(e) => setEditDraft({ ...editDraft, delivery_address: e.target.value })} />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">City *</Label>
+              <Input value={editDraft.city} onChange={(e) => setEditDraft({ ...editDraft, city: e.target.value })} />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">Notes</Label>
+              <Textarea rows={2} value={editDraft.notes} onChange={(e) => setEditDraft({ ...editDraft, notes: e.target.value })} />
+            </div>
+            {editError ? (
+              <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{editError}</p>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editBusy}>Cancel</Button>
+              <Button onClick={() => void saveDelivery()} disabled={editBusy}>
+                {editBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MapPin className="mr-2 h-4 w-4" />}
+                Save address
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Status actions (only transitions workers are allowed to make) */}
       {["BOOKED", "IN_TRANSIT"].includes(order.status) ? (

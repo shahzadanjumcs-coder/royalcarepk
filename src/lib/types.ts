@@ -188,6 +188,13 @@ export const APPROVAL_LABELS: Record<OrderApprovalStatus, string> = {
   REJECTED: "Rejected",
 };
 
+/** One bundle component as required by inventory (order-time snapshot). */
+export interface DealComponentSnapshot {
+  product_id: string;
+  name: string;
+  quantity: number;
+}
+
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -197,6 +204,28 @@ export interface OrderItem {
   quantity: number;
   unit_price: number;
   line_total: number;
+  /** Set when this line is a deal/bundle line (order-time reference). */
+  deal_id?: string | null;
+  /** Bundle component snapshot at order time — the inventory requirement. */
+  components?: DealComponentSnapshot[] | null;
+}
+
+export interface DealItem {
+  id: string;
+  deal_id: string;
+  product_id: string;
+  quantity: number;
+}
+
+export interface Deal {
+  id: string;
+  name: string;
+  description: string | null;
+  selling_price: number;
+  status: "active" | "inactive" | "archived";
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Order {

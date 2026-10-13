@@ -16,6 +16,15 @@ type SessionShape = { role: string; userId: string; name?: string } | null;
 let mockSession: SessionShape = { role: "super_admin", userId: "u-super", name: "Super" };
 mock.module("@/lib/auth/session", () => ({ getSession: async () => mockSession }));
 mock.module("@/lib/services/audit", () => ({ logAudit: async () => undefined }));
+// The orders route now imports the orders service (admin edit, Phase 3), which
+// drags in server-only service modules — stub the service; DELETE (the handler
+// under test) never calls it.
+mock.module("@/lib/services/orders", () => ({
+  adminUpdateOrder: async () => undefined,
+  workerUpdateOrderDelivery: async () => undefined,
+  changeOrderStatus: async () => undefined,
+  OrderError: class OrderError extends Error {},
+}));
 
 // ---- fake store -----------------------------------------------------------
 const db: Record<string, Record<string, unknown>[]> = {

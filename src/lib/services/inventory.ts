@@ -91,28 +91,68 @@ export async function applyMovement(params: {
   });
 }
 
+/** One inventory requirement: either a plain product line or a bundle line with components. */
+export interface InventoryRequirement {
+  product_id: string | null;
+  quantity: number;
+  /** Deal/bundle component snapshot — when present, product_id/quantity are display-only. */
+  components?: { product_id: string; quantity: number }[] | null;
+}
+
+/** Expand an order line into its concrete product requirements. */
+function expandRequirement(item: InventoryRequirement): { product_id: string; quantity: number }[] {
+  if (item.components && item.components.length) {
+    return item.components.filter((c) => c.product_id);
+  }
+  return item.product_id ? [{ product_id: item.product_id, quantity: item.quantity }] : [];
+}
+
 /** Reserve stock for a newly created order (per item). */
 export async function reserveForOrder(
-  items: { product_id: string | null; quantity: number }[],
+  items: InventoryRequirement[],
   orderId: string,
   orderNumber: string,
   userId?: string | null
 ): Promise<void> {
-  for (const item of items) {
-    if (!item.product_id) continue;
-    const product = await store.get<{ id: string; current_stock: number; reserved_stock: number }>(
+  // ---- validate EVERY requirement FIRST (atomic: no partial reservation) ----
+  // Deal bundles expand into their component products, so a bundle line can
+  // fail on any component — nothing is applied unless everything fits.
+  const requirements = items.flatMap(expandRequirement);
+  const availability: { product_id: string; quantity: number; available: number; name: string }[] = [];
+  for (const req of requirements) {
+    const product = await store.get<{ id: string; name: string; current_stock: number; reserved_stock: number }>(
       "products",
-      item.product_id
+      req.product_id
     );
     if (!product) throw new InventoryError("A product in this order no longer exists.");
-    const available = product.current_stock - product.reserved_stock;
-    if (item.quantity > available) {
-      throw new InventoryError(`Not enough available stock (${available} left) to reserve ${item.quantity}.`);
+    availability.push({
+      product_id: req.product_id,
+      quantity: req.quantity,
+      available: product.current_stock - product.reserved_stock,
+      name: product.name,
+    });
+  }
+  // aggregate per product (two lines may require the same product)
+  const needByProduct = new Map<string, { quantity: number; available: number; name: string }>();
+  for (const a of availability) {
+    const prev = needByProduct.get(a.product_id);
+    needByProduct.set(a.product_id, {
+      quantity: (prev?.quantity ?? 0) + a.quantity,
+      available: a.available,
+      name: a.name,
+    });
+  }
+  for (const [productId, need] of needByProduct) {
+    if (need.quantity > need.available) {
+      throw new InventoryError(`Not enough available stock of "${need.name}" (${need.available} left) to reserve ${need.quantity}.`);
     }
+  }
+  // ---- all fits — apply ----
+  for (const req of requirements) {
     await applyMovement({
-      productId: item.product_id,
+      productId: req.product_id,
       type: "ORDER_RESERVE",
-      quantity: item.quantity,
+      quantity: req.quantity,
       orderId,
       note: `Reserved for ${orderNumber}`,
       userId,
@@ -126,19 +166,20 @@ export async function releaseForOrder(
   orderNumber: string,
   userId?: string | null
 ): Promise<void> {
-  const items = await store.list<{ product_id: string | null; quantity: number }>("order_items", {
+  const items = await store.list<InventoryRequirement>("order_items", {
     filters: { order_id: orderId },
   });
   for (const item of items.rows) {
-    if (!item.product_id) continue;
-    await applyMovement({
-      productId: item.product_id,
-      type: "ORDER_RELEASE",
-      quantity: item.quantity,
-      orderId,
-      note: `Reservation released for ${orderNumber}`,
-      userId,
-    });
+    for (const req of expandRequirement(item)) {
+      await applyMovement({
+        productId: req.product_id,
+        type: "ORDER_RELEASE",
+        quantity: req.quantity,
+        orderId,
+        note: `Reservation released for ${orderNumber}`,
+        userId,
+      });
+    }
   }
 }
 
@@ -148,19 +189,20 @@ export async function finalizeForOrder(
   orderNumber: string,
   userId?: string | null
 ): Promise<void> {
-  const items = await store.list<{ product_id: string | null; quantity: number }>("order_items", {
+  const items = await store.list<InventoryRequirement>("order_items", {
     filters: { order_id: orderId },
   });
   for (const item of items.rows) {
-    if (!item.product_id) continue;
-    await applyMovement({
-      productId: item.product_id,
-      type: "DELIVERY",
-      quantity: item.quantity,
-      orderId,
-      note: `Finalized for delivered order ${orderNumber}`,
-      userId,
-    });
+    for (const req of expandRequirement(item)) {
+      await applyMovement({
+        productId: req.product_id,
+        type: "DELIVERY",
+        quantity: req.quantity,
+        orderId,
+        note: `Finalized for delivered order ${orderNumber}`,
+        userId,
+      });
+    }
   }
 }
 
@@ -170,19 +212,20 @@ export async function restoreForOrder(
   orderNumber: string,
   userId?: string | null
 ): Promise<void> {
-  const items = await store.list<{ product_id: string | null; quantity: number }>("order_items", {
+  const items = await store.list<InventoryRequirement>("order_items", {
     filters: { order_id: orderId },
   });
   for (const item of items.rows) {
-    if (!item.product_id) continue;
-    await applyMovement({
-      productId: item.product_id,
-      type: "RETURN",
-      quantity: item.quantity,
-      orderId,
-      note: `Return received for ${orderNumber}`,
-      userId,
-    });
+    for (const req of expandRequirement(item)) {
+      await applyMovement({
+        productId: req.product_id,
+        type: "RETURN",
+        quantity: req.quantity,
+        orderId,
+        note: `Return received for ${orderNumber}`,
+        userId,
+      });
+    }
   }
 }
 

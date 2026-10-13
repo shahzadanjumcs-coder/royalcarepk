@@ -56,6 +56,29 @@ interface CatalogResponse {
   mode?: string;
 }
 
+/** Shape diagnostics returned by the sync endpoint (live mode only). */
+interface CatalogDiagnostics {
+  keys: string[];
+  companies: number | null;
+  couriers: number | null;
+  pickupAddress: number | null;
+  pickups: number | null;
+  extractedLinks: number;
+}
+
+/** One-line, secret-free description of what the live catalog response contained. */
+function describeDiagnostics(d: CatalogDiagnostics | null | undefined): string {
+  if (!d) return "";
+  const sections = [
+    d.companies != null ? `companies(${d.companies})` : null,
+    d.couriers != null ? `couriers(${d.couriers})` : null,
+    d.pickupAddress != null ? `pickupAddress(${d.pickupAddress})` : null,
+    d.pickups != null ? `pickups(${d.pickups})` : null,
+  ].filter(Boolean) as string[];
+  const seen = sections.length ? `Response sections: ${sections.join(", ")}.` : `Response keys: ${d.keys.join(", ") || "none"}.`;
+  return `${seen} Mapping edges found in the response: ${d.extractedLinks}.`;
+}
+
 export function FlashipPickupPoints() {
   const { data, loading, error, refresh } = useApi<CatalogResponse>("/api/flaship/catalog");
   const [syncing, setSyncing] = useState(false);
@@ -77,14 +100,21 @@ export function FlashipPickupPoints() {
       // Syncing the pickup list also refreshes the courier↔pickup mapping:
       // the /catalog/ response is parsed as a whole and the merchant_pickup_couriers
       // edges are persisted alongside the pickups (see syncCatalog).
-      const res = await api<{ count: number; counts?: { links?: number } }>("/api/flaship/catalog", {
+      const res = await api<{
+        count: number;
+        counts?: { links?: number };
+        diagnostics?: CatalogDiagnostics | null;
+      }>("/api/flaship/catalog", {
         method: "POST",
         json: { type: "pickups" },
       });
       const pairs = res.counts?.links ?? 0;
       setMessage({
         kind: "ok",
-        text: `Synced ${res.count} pickup location${res.count === 1 ? "" : "s"} from Flaship · ${pairs} courier-pickup pair${pairs === 1 ? "" : "s"} mapped.`,
+        text:
+          pairs > 0
+            ? `Synced ${res.count} pickup location${res.count === 1 ? "" : "s"} from Flaship · ${pairs} courier-pickup pair${pairs === 1 ? "" : "s"} mapped.`
+            : `Synced ${res.count} pickup location${res.count === 1 ? "" : "s"} from Flaship · 0 courier-pickup pairs. ${describeDiagnostics(res.diagnostics)} Booking is NOT blocked — with no mapping stored, Flaship itself validates each booking. If pairs are expected, enable couriers for your pickup locations in the Flaship merchant dashboard, then sync again.`,
       });
       refresh();
     } catch (e) {
@@ -127,9 +157,12 @@ export function FlashipPickupPoints() {
 
       {!loading && pickups.length > 0 && links.length === 0 ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          No courier-pickup mapping synced yet. Press <strong>Sync from Flaship</strong> to load it. If the pair count
-          stays 0, no courier is enabled for these pickups on the Flaship side yet — booking will be rejected until the
-          mapping exists there.
+          No courier-pickup mapping is stored locally. This is not necessarily an error — the Flaship catalog may not
+          expose mapping data for this merchant yet. <strong>Booking is NOT blocked by this:</strong> with no mapping
+          stored, the pickup list stays fully available and Flaship itself validates each booking (an unmapped pair is
+          rejected by Flaship with a clear error on the order). Press <strong>Sync from Flaship</strong> to load the
+          mapping; if the pair count stays 0, check the sync result diagnostics and enable couriers for your pickup
+          locations in the Flaship merchant dashboard.
         </div>
       ) : null}
 
@@ -145,7 +178,8 @@ export function FlashipPickupPoints() {
             <p>
               The Integration API has no endpoint to create or change these pairs, so they are read-only here. To enable
               or disable a courier for a pickup, update it in your Flaship merchant dashboard, then press Sync from
-              Flaship. The booking dialogs only offer pairs that exist in this mapping.
+              Flaship. When mapping data exists, the booking dialogs only offer pickup locations mapped to the selected
+              courier; when no mapping is stored, all active pickups are offered and Flaship remains the final validator.
             </p>
           </div>
         </div>

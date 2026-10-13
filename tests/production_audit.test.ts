@@ -35,6 +35,7 @@ mock.module("@/lib/services/notifications", () => ({
 }));
 mock.module("@/lib/services/whatsapp", () => ({ enqueueWhatsAppOrderEvent: async () => undefined }));
 mock.module("@/lib/services/inventory", () => ({
+  applyMovement: async () => undefined,
   reserveForOrder: async () => undefined,
   finalizeForOrder: async () => undefined,
   restoreForOrder: async () => undefined,

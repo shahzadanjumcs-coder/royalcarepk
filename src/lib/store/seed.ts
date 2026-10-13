@@ -184,6 +184,41 @@ const products: Row[] = productDefs.map((p) => {
 });
 put("products", products);
 
+// ---------------- Deals / bundles (demo) ----------------
+// Two sample bundles built from the first active products: one active (shows
+// on order forms) and one inactive (hidden but editable) so both paths of the
+// deal lifecycle are exercised in demo mode.
+const activeProducts = products.filter((p) => p.status === "active");
+if (activeProducts.length >= 2) {
+  const [d1a, d1b, d2a] = activeProducts;
+  const deal1 = {
+    id: id("deal"),
+    name: "Home Spa Bundle",
+    description: "Best-selling pair at one promotional price",
+    selling_price: Math.round(((d1a.selling_price as number) + (d1b.selling_price as number)) * 0.85),
+    status: "active",
+    created_by: superAdmin.id,
+    created_at: daysAgoISO(20),
+    updated_at: daysAgoISO(20),
+  };
+  const deal2 = {
+    id: id("deal"),
+    name: "Starter Kit (paused)",
+    description: "Entry-level kit — currently deactivated",
+    selling_price: Math.round((d2a.selling_price as number) * 0.9),
+    status: "inactive",
+    created_by: superAdmin.id,
+    created_at: daysAgoISO(45),
+    updated_at: daysAgoISO(30),
+  };
+  put("deals", [deal1, deal2]);
+  put("deal_items", [
+    { id: id("di"), deal_id: deal1.id, product_id: d1a.id, quantity: 1 },
+    { id: id("di"), deal_id: deal1.id, product_id: d1b.id, quantity: 1 },
+    { id: id("di"), deal_id: deal2.id, product_id: d2a.id, quantity: 2 },
+  ]);
+}
+
 // Opening purchase movements (initial stock)
 const openingMovements: Row[] = products.map((p) => ({
   id: id("mov"),

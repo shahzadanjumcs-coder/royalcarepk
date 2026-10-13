@@ -496,6 +496,54 @@ export function extractCatalog(payload: unknown): ExtractedCatalog {
   return { couriers, pickups, cities: [...cityMap.values()], links };
 }
 
+// ---------------- Catalog response diagnostics ----------------
+
+/**
+ * What did the live GET /catalog/ response actually contain?
+ *
+ * Pure helper for the admin pickup-points UI: when the courier-pickup pair
+ * count stays 0 after a sync, this answers WHY without exposing any secrets —
+ * it reports which top-level sections the response had, how many entries each
+ * held, and how many mapping edges the extractor produced from it. A response
+ * with companies[] but NO per-company pickup lists (or no recognizable mapping
+ * section at all) means the pairs are not exposed by the Integration API for
+ * this merchant yet — they must be enabled on the Flaship side (merchant
+ * dashboard), never fabricated locally.
+ */
+export interface CatalogDiagnostics {
+  /** Top-level keys present in the (unwrapped) response, order of appearance, max 12. */
+  keys: string[];
+  /** Entry counts of the recognized sections — null when the key is absent. */
+  companies: number | null;
+  couriers: number | null;
+  pickupAddress: number | null;
+  pickups: number | null;
+  /** Mapping edges extractCatalog() produced from this same response. */
+  extractedLinks: number;
+}
+
+export function catalogResponseDiagnostics(payload: unknown): CatalogDiagnostics {
+  const body = unwrap(payload);
+  const keys = Object.keys(body).slice(0, 12);
+  const countOf = (...keys: string[]): number | null => {
+    for (const k of keys) {
+      const v = body[k];
+      if (Array.isArray(v)) return v.length;
+    }
+    return null;
+  };
+  return {
+    keys,
+    companies: countOf("companies"),
+    couriers: countOf("couriers"),
+    pickupAddress: countOf("pickupAddress"),
+    pickups: countOf("pickups", "pickup_locations", "pickup_points"),
+    // extractCatalog is deterministic; re-running it here keeps the helper
+    // self-contained for tests and for callers that only hold the raw body.
+    extractedLinks: extractCatalog(payload).links.length,
+  };
+}
+
 // ---------------- Pickup↔courier pair validation ----------------
 
 /**

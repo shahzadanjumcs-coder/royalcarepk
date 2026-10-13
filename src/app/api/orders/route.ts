@@ -1,6 +1,7 @@
 import { ok, fail, withAuth, parseListParams, GENERIC_ERROR } from "@/lib/api/helpers";
 import { store } from "@/lib/store";
 import { createOrder, CreateOrderInput, OrderError } from "@/lib/services/orders";
+import { InventoryError } from "@/lib/services/inventory";
 import type { Order, Session } from "@/lib/types";
 import { z } from "zod";
 
@@ -87,10 +88,11 @@ const orderSchema = z.object({
     city: z.string().optional(),
   }),
   items: z.array(z.object({
-    product_id: z.string().min(1),
+    product_id: z.string().min(1).optional(),
+    deal_id: z.string().min(1).optional(),
     quantity: z.number().positive(),
-    unit_price: z.number().nonnegative(),
-  })).min(1),
+    unit_price: z.number().nonnegative().optional(),
+  }).refine((i) => !!i.product_id !== !!i.deal_id, "Each line is either a product or a deal.")).min(1),
   discount: z.number().nonnegative().default(0),
   cod_amount: z.number().nonnegative().optional(),
   delivery_address: z.string().min(1),
@@ -122,6 +124,8 @@ export const POST = withAuth(["super_admin", "admin", "worker"], async (session:
     return ok({ order }, 201);
   } catch (e) {
     if (e instanceof OrderError) return fail(e.message, 422);
+    // insufficient component stock is a validation failure, not a server error
+    if (e instanceof InventoryError) return fail(e.message, 422);
     console.error("[orders.POST]", e);
     return fail(GENERIC_ERROR, 500);
   }

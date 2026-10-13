@@ -17,6 +17,7 @@ import { Loader2, Plus, Trash2, AlertTriangle, Save } from "lucide-react";
 interface LookupData {
   customers: { id: string; name: string; phone: string; city: string | null; address: string | null }[];
   products: { id: string; name: string; sku: string; selling_price: number; available_stock: number }[];
+  deals: { id: string; name: string; description: string | null; selling_price: number; items: { product_id: string; product_name: string; quantity: number; available_stock: number }[] }[];
   workers: { id: string; name: string; commission_rate: number }[];
   flaship: { mode: string; default_courier: string | null; default_pickup: string | null };
 }
@@ -24,6 +25,7 @@ interface LookupData {
 interface ItemRow {
   key: number;
   product_id: string;
+  deal_id?: string;
   quantity: number;
   unit_price: number;
 }
@@ -45,10 +47,26 @@ export default function NewOrderPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const subtotal = useMemo(
-    () => items.reduce((s, i) => s + i.quantity * i.unit_price, 0),
-    [items]
+    () => items.reduce((s, i) => {
+      if (i.deal_id) {
+        const d = lookup?.deals.find((x) => x.id === i.deal_id);
+        return s + (d ? d.selling_price * i.quantity : 0);
+      }
+      return s + i.quantity * i.unit_price;
+    }, 0),
+    [items, lookup]
   );
   const total = Math.max(0, subtotal - discount);
+
+  /** Can every bundle component cover its required quantity? */
+  const dealShortfall = (dealId: string, qty: number): string | null => {
+    const d = lookup?.deals.find((x) => x.id === dealId);
+    if (!d) return null;
+    for (const c of d.items) {
+      if (qty * c.quantity > c.available_stock) return `${c.product_name}: only ${c.available_stock} available for this bundle.`;
+    }
+    return null;
+  };
 
   const setItem = (key: number, patch: Partial<ItemRow>) =>
     setItems((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -65,9 +83,18 @@ export default function NewOrderPage() {
       if (!newCustomer.name.trim()) errs.customer = "Customer name is required.";
       if (!/^[0-9+\-\s()]{7,20}$/.test(newCustomer.phone)) errs.customer = "A valid customer phone is required.";
     }
-    if (items.some((i) => !i.product_id)) errs.items = "Every row needs a product.";
+    if (items.some((i) => !i.deal_id && !i.product_id)) errs.items = "Every row needs a product.";
     if (items.some((i) => i.quantity <= 0)) errs.items = "Quantities must be positive.";
-    if (items.some((i) => i.unit_price < 0)) errs.items = "Prices cannot be negative.";
+    for (const i of items) {
+      if (i.deal_id) {
+        const short = dealShortfall(i.deal_id, i.quantity);
+        if (short) errs.items = short;
+      } else if (i.product_id) {
+        const p = lookup?.products.find((x) => x.id === i.product_id);
+        if (p && i.quantity > p.available_stock) errs.items = `Only ${p.available_stock} available of ${p.name}.`;
+      }
+    }
+    if (items.some((i) => !i.deal_id && i.unit_price < 0)) errs.items = "Prices cannot be negative.";
     if (discount < 0 || discount > subtotal) errs.discount = "Discount must be between 0 and the subtotal.";
     if (!deliveryAddress.trim()) errs.deliveryAddress = "Delivery address is required.";
     if (!city.trim()) errs.city = "Delivery city is required.";
@@ -88,7 +115,11 @@ export default function NewOrderPage() {
             customerMode === "existing"
               ? { id: customerId }
               : { name: newCustomer.name, phone: newCustomer.phone, email: newCustomer.email, address: newCustomer.address, city: newCustomer.city },
-          items: items.map((i) => ({ product_id: i.product_id, quantity: i.quantity, unit_price: i.unit_price })),
+          items: items.map((i) =>
+            i.deal_id
+              ? { deal_id: i.deal_id, quantity: i.quantity }
+              : { product_id: i.product_id, quantity: i.quantity, unit_price: i.unit_price }
+          ),
           discount,
           delivery_address: deliveryAddress,
           city,
@@ -187,27 +218,57 @@ export default function NewOrderPage() {
       <Card>
         <CardHeader className="flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Items</CardTitle>
-          <Button type="button" size="sm" variant="outline" onClick={() => setItems((r) => [...r, { key: Date.now(), product_id: "", quantity: 1, unit_price: 0 }])}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> Add item
-          </Button>
+          <div className="flex items-center gap-2">
+            {(lookup?.deals ?? []).length ? (
+              <Select
+                value=""
+                onValueChange={(dealId) => {
+                  setItems((r) => [...r, { key: Date.now(), product_id: "", deal_id: dealId, quantity: 1, unit_price: 0 }]);
+                }}
+              >
+                <SelectTrigger className="h-9 w-40"><SelectValue placeholder="Add deal…" /></SelectTrigger>
+                <SelectContent>
+                  {(lookup?.deals ?? []).map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} — {formatCurrency(d.selling_price)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+            <Button type="button" size="sm" variant="outline" onClick={() => setItems((r) => [...r, { key: Date.now(), product_id: "", quantity: 1, unit_price: 0 }])}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> Add item
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {items.map((row, idx) => {
+            const deal = row.deal_id ? lookup?.deals.find((d) => d.id === row.deal_id) : null;
             const product = lookup?.products.find((p) => p.id === row.product_id);
+            const shortfall = deal ? dealShortfall(deal.id, row.quantity) : null;
             return (
               <div key={row.key} className="grid grid-cols-12 items-end gap-2 rounded-lg border border-border p-3">
                 <div className="col-span-12 sm:col-span-5">
-                  <Label className="mb-1 block text-xs">Product {idx + 1}</Label>
-                  <Select value={row.product_id} onValueChange={(v) => pickProduct(row.key, v)}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Select product" /></SelectTrigger>
-                    <SelectContent>
-                      {(lookup?.products ?? []).map((p) => (
-                        <SelectItem key={p.id} value={p.id} disabled={p.available_stock <= 0}>
-                          {p.name} ({p.available_stock} avail.)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="mb-1 block text-xs">{deal ? "Deal" : `Product ${idx + 1}`}</Label>
+                  {deal ? (
+                    <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm">
+                      <p className="font-medium text-sky-900">{deal.name} (bundle)</p>
+                      <p className="text-xs text-sky-700">
+                        {deal.items.map((c) => `${c.product_name} × ${c.quantity}`).join(" + ")}
+                      </p>
+                    </div>
+                  ) : (
+                    <Select value={row.product_id} onValueChange={(v) => pickProduct(row.key, v)}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Select product" /></SelectTrigger>
+                      <SelectContent>
+                        {(lookup?.products ?? []).map((p) => (
+                          <SelectItem key={p.id} value={p.id} disabled={p.available_stock <= 0}>
+                            {p.name} ({p.available_stock} avail.)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div className="col-span-4 sm:col-span-2">
                   <Label className="mb-1 block text-xs">Qty</Label>
@@ -220,17 +281,23 @@ export default function NewOrderPage() {
                   />
                 </div>
                 <div className="col-span-5 sm:col-span-3">
-                  <Label className="mb-1 block text-xs">Unit price</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    inputMode="decimal"
-                    value={row.unit_price}
-                    onChange={(e) => setItem(row.key, { unit_price: Math.max(0, Number(e.target.value || 0)) })}
-                  />
+                  <Label className="mb-1 block text-xs">{deal ? "Bundle price" : "Unit price"}</Label>
+                  {deal ? (
+                    <Input value={formatCurrency(deal.selling_price)} disabled aria-readonly />
+                  ) : (
+                    <Input
+                      type="number"
+                      min={0}
+                      inputMode="decimal"
+                      value={row.unit_price}
+                      onChange={(e) => setItem(row.key, { unit_price: Math.max(0, Number(e.target.value || 0)) })}
+                    />
+                  )}
                 </div>
                 <div className="col-span-2 sm:col-span-2 flex justify-end">
-                  <span className="hidden text-sm font-medium sm:block">{formatCurrency(row.quantity * row.unit_price)}</span>
+                  <span className="hidden text-sm font-medium sm:block">
+                    {formatCurrency(deal ? deal.selling_price * row.quantity : row.quantity * row.unit_price)}
+                  </span>
                   <Button
                     type="button"
                     variant="ghost"
@@ -243,7 +310,9 @@ export default function NewOrderPage() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                {product && row.quantity > product.available_stock ? (
+                {shortfall ? (
+                  <p className="col-span-12 text-xs text-amber-600">{shortfall}</p>
+                ) : product && row.quantity > product.available_stock ? (
                   <p className="col-span-12 text-xs text-amber-600">
                     Only {product.available_stock} available — creation will fail unless stock is increased.
                   </p>

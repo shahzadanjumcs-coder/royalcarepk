@@ -41,10 +41,10 @@ export const POST = withAuth(["super_admin", "admin"], async (session, req) => {
     if (!type || !["couriers", "cities", "pickups", "all"].includes(type)) {
       return fail("Specify a catalog type: couriers, cities, pickups or all.", 422);
     }
-    const counts = await syncCatalog(type);
+    const { diagnostics, ...counts } = await syncCatalog(type);
     const count = counts.couriers + counts.cities + counts.pickups;
     await logAudit({ session, action: "flaship.catalog_synced", entity: "flaship", newData: { type, counts } });
-    return ok({ success: true, counts, count, type });
+    return ok({ success: true, counts, count, type, diagnostics });
   } catch (e) {
     if (e instanceof Error && /flaship/i.test(e.message)) return fail(e.message, 502);
     console.error("[flaship.catalog]", e);

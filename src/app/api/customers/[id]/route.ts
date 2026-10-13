@@ -43,6 +43,8 @@ export const PATCH = withAuth(["super_admin", "admin"], async (session, req, ctx
 export const DELETE = withAuth(["super_admin", "admin"], async (session, _req, ctx) => {
   try {
     const { id } = await (ctx as unknown as Ctx).params;
+    const existing = await store.get("customers", id);
+    if (!existing) return fail("Customer not found.", 404);
     const total = await store.count("orders", { customer_id: id });
     if (total > 0) {
       // soft-disable instead of deleting — preserves order history integrity

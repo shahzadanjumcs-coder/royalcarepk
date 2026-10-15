@@ -41,7 +41,73 @@ function matchesDate(row: Row, range?: ListOptions["dateRange"]): boolean {
   return true;
 }
 
-class MemoryStore implements Store {
+/**
+ * Demo-mode emulation of the production foreign-key actions so that deletes
+ * through this store behave EXACTLY like Supabase Postgres would (the demo
+ * store has no real constraint engine).
+ *
+ * Source of truth = the EFFECTIVE schema after every migration:
+ *   0001_init.sql, 0003_order_approval_worker_delete.sql (worker FKs were
+ *   deliberately downgraded CASCADE → SET NULL), 0004/0005 (WhatsApp),
+ *   0009_deals.sql (deals / deal_items).
+ *
+ *  - "cascade"   → child rows are removed together with the parent
+ *  - "set null"  → child references are nulled out (history is kept)
+ * RESTRICT edges (e.g. orders.customer_id) are enforced by the app layer's
+ * pre-delete count checks and therefore need no emulation here.
+ */
+type FkEdge = { child: TableName; column: string; action: "cascade" | "set null" };
+
+const FK_ON_DELETE: Partial<Record<TableName, FkEdge[]>> = {
+  products: [
+    { child: "deal_items", column: "product_id", action: "cascade" }, // 0009
+    { child: "inventory_movements", column: "product_id", action: "cascade" }, // 0001
+    { child: "order_items", column: "product_id", action: "set null" }, // 0001
+  ],
+  deals: [{ child: "deal_items", column: "deal_id", action: "cascade" }], // 0009
+  orders: [
+    { child: "order_items", column: "order_id", action: "cascade" }, // 0001
+    { child: "order_status_history", column: "order_id", action: "cascade" }, // 0001
+    { child: "shipments", column: "order_id", action: "cascade" }, // 0001
+    { child: "shipment_tracking", column: "order_id", action: "cascade" }, // 0001
+    { child: "commission_transactions", column: "order_id", action: "set null" }, // 0001
+    { child: "notifications", column: "order_id", action: "set null" }, // 0001
+    { child: "whatsapp_message_queue", column: "order_id", action: "set null" }, // 0004
+  ],
+  shipments: [{ child: "shipment_tracking", column: "shipment_id", action: "cascade" }], // 0001
+  categories: [{ child: "products", column: "category_id", action: "set null" }], // 0001
+  suppliers: [{ child: "products", column: "supplier_id", action: "set null" }], // 0001
+  teams: [{ child: "team_members", column: "team_id", action: "cascade" }], // 0001
+  profiles: [
+    { child: "team_members", column: "user_id", action: "cascade" }, // 0001
+    { child: "commission_transactions", column: "worker_id", action: "set null" }, // 0003 (was CASCADE)
+    { child: "commission_rules", column: "worker_id", action: "set null" }, // 0003 (was CASCADE)
+    { child: "worker_payments", column: "worker_id", action: "set null" }, // 0003 (was CASCADE)
+    { child: "orders", column: "worker_id", action: "set null" }, // 0001
+    { child: "inventory_movements", column: "created_by", action: "set null" }, // 0001
+    { child: "order_items", column: "created_by", action: "set null" }, // 0001
+    { child: "order_status_history", column: "created_by", action: "set null" }, // 0001
+    { child: "orders", column: "created_by", action: "set null" }, // 0001
+    { child: "deals", column: "created_by", action: "set null" }, // 0009
+    { child: "worker_payments", column: "created_by", action: "set null" }, // 0001
+    { child: "audit_logs", column: "user_id", action: "set null" }, // 0001
+  ],
+  whatsapp_accounts: [
+    { child: "whatsapp_routing_settings", column: "account_id", action: "set null" }, // 0004
+    { child: "whatsapp_routing_settings", column: "fallback_account_id", action: "set null" }, // 0004
+    { child: "whatsapp_bot_settings", column: "account_id", action: "set null" }, // 0004
+    { child: "whatsapp_message_queue", column: "account_id", action: "set null" }, // 0004
+    { child: "whatsapp_message_logs", column: "account_id", action: "set null" }, // 0004
+    { child: "whatsapp_group_settings", column: "account_id", action: "set null" }, // 0004
+    { child: "whatsapp_commands", column: "account_id", action: "set null" }, // 0004
+    { child: "whatsapp_inbox", column: "account_id", action: "set null" }, // 0005
+  ],
+  whatsapp_message_queue: [
+    { child: "whatsapp_message_logs", column: "queue_id", action: "cascade" }, // 0004
+  ],
+};
+
+export class MemoryStore implements Store {
   private db: Database = emptyDb();
   private loaded = false;
   private loadPromise: Promise<void> | null = null;
@@ -101,6 +167,23 @@ class MemoryStore implements Store {
     return this.db[name];
   }
 
+  /** Replicate the database's ON DELETE CASCADE / SET NULL behaviour. */
+  private applyOnDelete(table: TableName, deletedIds: string[]): void {
+    if (!deletedIds.length) return;
+    for (const edge of FK_ON_DELETE[table] ?? []) {
+      const childRows = this.table(edge.child);
+      const affected = childRows.filter((r) => deletedIds.includes(String(r[edge.column])));
+      if (!affected.length) continue;
+      if (edge.action === "cascade") {
+        const affectedIds = new Set(affected.map((r) => r.id));
+        this.db[edge.child] = childRows.filter((r) => !affectedIds.has(r.id));
+        this.applyOnDelete(edge.child, affected.map((r) => r.id)); // grandchildren (e.g. shipments → tracking)
+      } else {
+        for (const r of affected) r[edge.column] = null;
+      }
+    }
+  }
+
   async list<T>(table: TableName, opts: ListOptions = {}): Promise<ListResult<WithId<T>>> {
     await this.ensureLoaded();
     let rows = this.table(table).filter(
@@ -134,12 +217,12 @@ class MemoryStore implements Store {
     return { rows: rows as unknown as WithId<T>[], total };
   }
 
-  async get<T>(table: TableName, id: string): Promise<WithId<T> | null> {
+  async get<T = Record<string, unknown>>(table: TableName, id: string): Promise<WithId<T> | null> {
     await this.ensureLoaded();
     return (this.table(table).find((r) => r.id === id) as WithId<T>) ?? null;
   }
 
-  async first<T>(table: TableName, filters: Record<string, unknown>): Promise<WithId<T> | null> {
+  async first<T = Record<string, unknown>>(table: TableName, filters: Record<string, unknown>): Promise<WithId<T> | null> {
     await this.ensureLoaded();
     return (this.table(table).find((r) => matches(r, filters)) as WithId<T>) ?? null;
   }
@@ -205,7 +288,10 @@ class MemoryStore implements Store {
     await this.ensureLoaded();
     const rows = this.table(table);
     const idx = rows.findIndex((r) => r.id === id);
-    if (idx !== -1) rows.splice(idx, 1);
+    if (idx !== -1) {
+      rows.splice(idx, 1);
+      this.applyOnDelete(table, [id]);
+    }
     this.scheduleSave();
   }
 

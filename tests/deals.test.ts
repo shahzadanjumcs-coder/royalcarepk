@@ -92,7 +92,7 @@ mock.module("@/lib/services/whatsapp", () => ({ enqueueWhatsAppOrderEvent: async
 mock.module("@/lib/services/commission", () => ({ processCommissionForStatus: async () => undefined }));
 
 const REAL_DEALS = "../src/lib/services/deals?real";
-const { createDeal, updateDeal, deleteDeal, resolveDealForOrder, DealError } = await import(REAL_DEALS);
+const { createDeal, updateDeal, deleteDeal, resolveDealForOrder, listDealsWithItems, getDealWithItems, DealError } = await import(REAL_DEALS);
 const REAL_ORDERS = "../src/lib/services/orders?real";
 const { createOrder, adminUpdateOrder, OrderError } = await import(REAL_ORDERS);
 // NOTE: plain path — orders?real imports "./inventory" relative, resolving to
@@ -154,6 +154,45 @@ describe("deals service — create / update / delete", () => {
     const result = await deleteDeal(admin, "d2");
     expect(result.deleted).toBe(true);
     expect(tables.deals.find((d) => d.id === "d2")).toBeUndefined();
+  });
+});
+
+describe("deals listing — production 500 regression + empty state", () => {
+  it("lists deals with resolved component product data", async () => {
+    const rows = await listDealsWithItems();
+    expect(rows).toHaveLength(2);
+    const d1 = rows.find((d) => d.id === "d1") as Row & { items: Row[] };
+    expect(d1.items).toHaveLength(2);
+    expect(d1.items.map((i) => i.product_name).sort()).toEqual(["Massage Oil", "Serum"]);
+    expect(d1.items.every((i) => typeof i.available_stock === "number")).toBe(true);
+  });
+
+  it("returns an EMPTY set on an empty deals table (friendly empty state, no throw)", async () => {
+    // Production regression: a fresh Supabase (0009 applied, zero deals) 500-ed
+    // on GET /api/deals because the un-ordered deal_items list() defaulted to
+    // a created_at order the table does not have. The service contract is:
+    // no deals ⇒ { rows: [], total: 0 } — the UI renders "No deals yet".
+    tables.deals = [];
+    tables.deal_items = [];
+    const rows = await listDealsWithItems();
+    expect(rows).toEqual([]);
+  });
+
+  it("returns an empty set even when deal_items exist but no deals match", async () => {
+    tables.deals = [];
+    const rows = await listDealsWithItems();
+    expect(rows).toEqual([]); // orphan-free: items without a parent deal never surface
+  });
+
+  it("status filter narrows the list without dropping resolved items", async () => {
+    const rows = await listDealsWithItems({ statuses: ["active"] });
+    expect(rows).toHaveLength(1);
+    expect((rows[0] as Row).id).toBe("d1");
+    expect((rows[0] as Row & { items: Row[] }).items).toHaveLength(2);
+  });
+
+  it("getDealWithItems returns null for a missing deal (no throw)", async () => {
+    expect(await getDealWithItems("does-not-exist")).toBeNull();
   });
 });
 

@@ -15,7 +15,7 @@ type Row = Record<string, unknown>;
  * default ordering never references a missing column — e.g. the settings 500
  * and the booking-path crash `column order_items.created_at does not exist`.
  */
-const DEFAULT_ORDER_COLUMN: Partial<Record<TableName, string>> = {
+export const DEFAULT_ORDER_COLUMN: Partial<Record<TableName, string>> = {
   settings: "updated_at",
   flaship_couriers: "synced_at",
   flaship_cities: "synced_at",
@@ -35,6 +35,12 @@ const DEFAULT_ORDER_COLUMN: Partial<Record<TableName, string>> = {
   // same table shape in 0004 (updated_at, no created_at) — currently only
   // first()-ed, mapped so a future list() can never regress.
   whatsapp_bot_settings: "updated_at",
+  // 0009 table (id, deal_id, product_id, quantity — NO created_at): the
+  // default created_at order crashed every un-ordered list() on it with
+  // "column deal_items.created_at does not exist" (PGRST204), 500-ing
+  // GET /api/deals (/admin/deals showed "Something went wrong…"), deal
+  // detail/edit and order-time deal resolution. Ordered by primary key.
+  deal_items: "id",
 };
 
 export class SupabaseStore implements Store {

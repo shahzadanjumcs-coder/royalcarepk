@@ -16,6 +16,7 @@ import {
 import { logAudit, type Actor } from "@/lib/services/audit";
 import { notifyAdmins } from "@/lib/services/notifications";
 import { changeOrderStatus } from "@/lib/services/orders";
+import { canTransition } from "@/lib/services/order_transitions";
 import { enqueueWhatsAppOrderEvent } from "@/lib/services/whatsapp";
 
 export class FlashipError extends Error {}
@@ -865,12 +866,79 @@ function extractHistory(payload: Record<string, unknown>): RawEvent[] {
   return events;
 }
 
-function extractLatestStatus(payload: Record<string, unknown>): string | null {
-  const direct = payload.order_status ?? payload.orderStatus ?? payload.latest_status ?? payload.latestStatus ?? payload.live_courier_status;
-  if (direct && String(direct).trim()) return String(direct).trim().toUpperCase();
-  if (typeof payload.status === "string" && !TRUEISH.has(payload.status.toLowerCase().trim()) && !["error", "failed"].includes(payload.status.toLowerCase().trim())) {
-    return payload.status.trim().toUpperCase();
+export interface TrackingStatusFields {
+  /**
+   * Authoritative Flaship shipment status, uppercased — the shipment-level
+   * canonical field on the tracking response. Sources, in precedence order:
+   * `order_status` / `orderStatus` / `latest_status` / `latestStatus` (fields
+   * the app has always treated as the shipment state, also emitted by the
+   * built-in simulator), then the top-level `status` field verified in
+   * production 2026-10 ("status": "OUT_FOR_DELIVERY" while live_courier_status
+   * still reads "Assigned to courier in SARGODHA"). Null when the response
+   * carries none.
+   */
+  shipmentStatus: string | null;
+  /**
+   * Raw courier scan text (`live_courier_status`, e.g. "Assigned to courier in
+   * SARGODHA") with its ORIGINAL casing preserved for display and diagnostics.
+   * Never authoritative on its own: a courier scan alone must never fabricate
+   * OUT_FOR_DELIVERY (Leopards words its pre-OFD rider assignment this way).
+   */
+  courierStatus: string | null;
+}
+
+/**
+ * Canonical status-normalization layer (typed) — separates the three classes
+ * of status data a Flaship tracking response can carry:
+ *
+ *   1. Authoritative shipment status  → `shipmentStatus` (see interface).
+ *   2. Raw courier status             → `courierStatus` (verbatim scan text).
+ *   3. Tracking-history events        → raw per-scan text + timestamps,
+ *      extracted separately by extractHistory() and persisted as checkpoints.
+ *
+ * Precedence fixed here (2026-10 OFD sync bug): the authoritative top-level
+ * `status` is consulted BEFORE `live_courier_status`. The previous ?? chain
+ * let the raw courier scan shadow the authoritative shipment status, so a
+ * verified "OUT_FOR_DELIVERY" response was parsed as "ASSIGNED TO COURIER …",
+ * the order stayed IN_TRANSIT and the customer Out-for-Delivery WhatsApp never
+ * fired. `status` is accepted as authoritative only when it normalizes to a
+ * RECOGNIZED canonical key — success flags ("success"/"ok"/"true"/…) and
+ * unrecognized text can never hijack the state, and an unknown value is never
+ * silently classified as DELIVERED, CANCELLED or OUT_FOR_DELIVERY.
+ */
+export function extractTrackingStatusFields(payload: Record<string, unknown>): TrackingStatusFields {
+  const directShipment = payload.order_status ?? payload.orderStatus ?? payload.latest_status ?? payload.latestStatus;
+  const directUpper = directShipment && String(directShipment).trim() ? String(directShipment).trim().toUpperCase() : null;
+
+  let topLevelUpper: string | null = null;
+  if (!directUpper && typeof payload.status === "string") {
+    const s = payload.status.trim();
+    const lower = s.toLowerCase();
+    // Same success-flag guard extractLatestStatus has always applied to
+    // `status`, plus the recognized-canonical gate: an explicit canonical
+    // shipment status is authoritative; anything else defers to the raw
+    // courier scan (the previous behavior for unrecognized top-level text).
+    // The CANONICAL underscore form is returned so casing/spaces/hyphens are
+    // normalized consistently; the original raw text stays available in
+    // checkpoints/logs and in the courierStatus field.
+    if (s && !TRUEISH.has(lower) && !["error", "failed"].includes(lower)) {
+      const canonical = normalizeCourierStatus(s);
+      if (CANONICAL_COURIER_STATUSES.has(canonical)) topLevelUpper = canonical;
+    }
   }
+
+  const rawCourier = payload.live_courier_status;
+  const courierStatus = rawCourier && String(rawCourier).trim() ? String(rawCourier).trim() : null;
+
+  return { shipmentStatus: directUpper ?? topLevelUpper, courierStatus };
+}
+
+function extractLatestStatus(payload: Record<string, unknown>): string | null {
+  // Precedence: authoritative Flaship shipment status first, raw courier scan
+  // second, newest history event last (the original fallback, unchanged).
+  const { shipmentStatus, courierStatus } = extractTrackingStatusFields(payload);
+  if (shipmentStatus) return shipmentStatus;
+  if (courierStatus) return courierStatus.toUpperCase();
   const history = extractHistory(payload);
   if (history.length) {
     // newest first when timestamps allow
@@ -896,12 +964,18 @@ export async function syncOrderTracking(session: Actor | null, orderId: string):
   }
 
   const payload = normalizeTrackingPayload(raw);
-  const courierStatus = extractLatestStatus(payload);
+  // Typed normalization: authoritative shipment status vs raw courier scan vs
+  // history events. `latestStatus` is the EFFECTIVE status (authoritative
+  // first — the verified production response carries status OUT_FOR_DELIVERY
+  // while live_courier_status still reads "Assigned to courier in …"); the
+  // verbatim courier scan is kept separately for checkpoints/diagnostics.
+  const statusFields = extractTrackingStatusFields(payload);
+  const latestStatus = extractLatestStatus(payload);
   const history = extractHistory(payload);
   const checkpoints = history.length
     ? history
-    : courierStatus
-      ? [{ status: courierStatus, description: null, location: null, scanned_at: new Date().toISOString() }]
+    : latestStatus
+      ? [{ status: latestStatus, description: null, location: null, scanned_at: new Date().toISOString() }]
       : [];
 
   const shipment = await store.first("shipments", { order_id: orderId });
@@ -929,12 +1003,17 @@ export async function syncOrderTracking(session: Actor | null, orderId: string):
   // Free-text courier statuses (Leopards "ASSIGNED TO COURIER IN SARGODHA" etc.)
   // are normalized to canonical keys before the STATUS_MAP lookup — exact-match
   // only left orders stuck at BOOKED and made later syncs report "up to date".
-  const statusKey = courierStatus ? normalizeCourierStatus(courierStatus) : "";
+  // The effective status (authoritative Flaship shipment status when present,
+  // raw courier scan otherwise) drives the mapping and the triggers below.
+  const statusKey = latestStatus ? normalizeCourierStatus(latestStatus) : "";
   const mapped = statusKey ? STATUS_MAP[statusKey] : undefined;
   await store.update("orders", orderId, { last_synced_at: new Date().toISOString() });
   if (shipment) {
     await store.update("shipments", shipment.id, {
-      shipment_status: courierStatus ?? "UNKNOWN",
+      // Raw courier scan verbatim when the response carries one (display and
+      // troubleshooting fidelity); otherwise the effective authoritative
+      // status. Never a fabricated value.
+      shipment_status: statusFields.courierStatus ?? latestStatus ?? "UNKNOWN",
       last_synced_at: new Date().toISOString(),
     });
   }
@@ -954,6 +1033,22 @@ export async function syncOrderTracking(session: Actor | null, orderId: string):
   }
 
   if (mapped?.status && order.status !== mapped.status) {
+    // Out-of-order protection: a stale or out-of-order tracking response must
+    // never REGRESS a newer valid order status (e.g. Flaship still reporting
+    // IN_TRANSIT after the order was delivered/returned). The shared
+    // transition map is the single source of truth — a disallowed
+    // auto-transition is reported clearly instead of applied. Previously this
+    // threw AFTER checkpoints/notifications had already been written, failing
+    // the whole sync with "Cannot change status from …".
+    if (!canTransition(order.status, mapped.status)) {
+      console.warn(
+        `[flaship] tracking sync kept order ${order.order_number} at ${order.status} — Flaship reports ${mapped.label} (backward transition not allowed)`
+      );
+      return {
+        applied: false,
+        message: `Flaship reports "${mapped.label}", but the order is already ${order.status} — keeping the newer order status.`,
+      };
+    }
     await changeOrderStatus(session ?? { userId: "system" }, orderId, mapped.status, `Auto-synced from Flaship: ${mapped.label}`);
     return { applied: true, message: `Status updated to ${mapped.label}.` };
   }

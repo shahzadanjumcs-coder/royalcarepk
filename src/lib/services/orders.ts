@@ -7,7 +7,12 @@ import { resolveDealForOrder } from "./deals";
 import { notifyAdmins, notifyWorker } from "./notifications";
 import { logAudit } from "./audit";
 import { enqueueWhatsAppOrderEvent } from "./whatsapp";
+import { TRANSITIONS, canTransition } from "./order_transitions";
 import { isValidPhone } from "@/lib/utils";
+
+// Re-exported so the rest of the app keeps a single import path for the
+// transition rules (the canonical definition lives in ./order_transitions).
+export { TRANSITIONS, canTransition };
 
 export class OrderError extends Error {}
 
@@ -18,21 +23,7 @@ export function canApprove(role: string | undefined): boolean {
   return role === "super_admin" || role === "admin";
 }
 
-/** Allowed status transitions (pragmatic courier workflow). */
-const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  // CREATED orders are admin-created (approval_status APPROVED) and can be
-  // booked directly — bookOrderWithFlaship books on Flaship FIRST and then
-  // moves the order to BOOKED; rejecting CREATED→BOOKED left booked orders
-  // stuck as CREATED with booking_status "failed" and fired no WhatsApp event.
-  CREATED: ["PENDING", "ASSIGNED", "BOOKED", "CANCELLED"],
-  PENDING: ["ASSIGNED", "BOOKED", "CANCELLED"],
-  ASSIGNED: ["PENDING", "BOOKED", "CANCELLED"],
-  BOOKED: ["IN_TRANSIT", "RETURNED", "CANCELLED"],
-  IN_TRANSIT: ["DELIVERED", "RETURNED"],
-  DELIVERED: ["RETURNED"],
-  RETURNED: [],
-  CANCELLED: [],
-};
+/** Allowed status transitions (pragmatic courier workflow) — see ./order_transitions. */
 
 export async function generateOrderNumber(): Promise<string> {
   const now = new Date();

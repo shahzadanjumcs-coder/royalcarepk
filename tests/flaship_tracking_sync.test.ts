@@ -137,7 +137,7 @@ globalThis.fetch = (async () =>
   new Response(JSON.stringify(fixture ?? { success: true, data: {} }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
-  })) as typeof fetch;
+  })) as unknown as typeof fetch;
 
 afterAll(() => {
   globalThis.fetch = REAL_FETCH;

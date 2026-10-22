@@ -708,6 +708,14 @@ const STATUS_MAP: Record<string, { status?: "IN_TRANSIT" | "DELIVERED" | "RETURN
   PICKED_UP: { status: "IN_TRANSIT", label: "Picked up" },
   IN_TRANSIT: { status: "IN_TRANSIT", label: "In transit" },
   OUT_FOR_DELIVERY: { status: "IN_TRANSIT", label: "Out for delivery" },
+  // Leopards scans "ASSIGNED TO COURIER IN <city>" when the destination-hub
+  // rider receives the parcel — the step BEFORE Leopards' own "Out for
+  // Delivery" scan (verified: Leopards status flow Booked → Dispatched →
+  // Arrived at Hub → Assigned to Courier → Out for Delivery → Delivered;
+  // vendor integrations map it to In transit). Order goes IN_TRANSIT; the
+  // customer OUT_FOR_DELIVERY WhatsApp still waits for the courier's actual
+  // out-for-delivery scan.
+  ASSIGNED_TO_COURIER: { status: "IN_TRANSIT", label: "Assigned to courier" },
   DELIVERED: { status: "DELIVERED", label: "Delivered" },
   RETURNED: { status: "RETURNED", label: "Returned" },
   RTO: { status: "RETURNED", label: "Return to origin" },
@@ -715,6 +723,53 @@ const STATUS_MAP: Record<string, { status?: "IN_TRANSIT" | "DELIVERED" | "RETURN
   RETURN_TO_SHIPPER: { status: "RETURNED", label: "Return to shipper" },
   CANCELLED: { label: "Cancelled" },
 };
+
+const CANONICAL_COURIER_STATUSES = new Set(Object.keys(STATUS_MAP));
+
+/**
+ * Map a raw courier checkpoint string to the canonical STATUS_MAP key.
+ *
+ * Root cause fixed here (2026-10 tracking-sync bug): Leopards (via Flaship)
+ * emits free-text checkpoints — "ASSIGNED TO COURIER IN SARGODHA", "SHIPMENT
+ * PICKED IN LAHORE", "ARRIVED AT STATION IN MULTAN", "DISPATCHED TO
+ * SARGODHA", "DELIVERED TO WAREHOUSE" — none of which are exact STATUS_MAP
+ * keys, so the old exact-match lookup left the order stuck at BOOKED while
+ * checkpoints kept accumulating; every later sync then correctly reported
+ * "Tracking is up to date." even though the order status was stale, and the
+ * WhatsApp triggers (exact raw strings) never fired either.
+ *
+ * Verified Leopards semantics (Leopards status guide 2026-07; ShipOps
+ * Leopards integration notes checked against Leopards docs 2026-10):
+ *   Booked → Dispatched → Arrived at Hub → Assigned to Courier →
+ *   Out for Delivery → Delivered
+ *   - "Assigned to courier in {city}" = rider assigned at the hub, delivery
+ *     attempt within ~4-8h — the step BEFORE "Out for Delivery", so it maps
+ *     to In transit (NOT out for delivery, and no customer OFD message).
+ *   - "Delivered to Warehouse / Vendor" words a RETURN that reached the
+ *     merchant — it must never mark the order DELIVERED.
+ * Unknown strings pass through unchanged (canonical underscore form), so the
+ * downstream exact-match lookup behaves exactly as before: unknown stays
+ * unmapped and no order status changes.
+ */
+export function normalizeCourierStatus(raw: unknown): string {
+  const spaced = String(raw ?? "").toUpperCase().replace(/[\s_\-]+/g, " ").trim();
+  if (!spaced) return "";
+  const canonical = spaced.replace(/ /g, "_");
+  if (CANONICAL_COURIER_STATUSES.has(canonical)) return canonical; // already canonical
+  // A return that reached the merchant is worded as "Delivered to …" — most
+  // specific check first, before the plain DELIVERED prefix rule below.
+  if (/DELIVERED TO (WAREHOUSE|VENDOR|SHIPPER|OFFICE|SHOP)/.test(spaced)) return "RETURN_TO_SHIPPER";
+  if (/^DELIVERED\b/.test(spaced)) return "DELIVERED";
+  if (/OUT FOR DELIVERY/.test(spaced)) return "OUT_FOR_DELIVERY";
+  if (/ASSIGNED TO COURIER/.test(spaced)) return "ASSIGNED_TO_COURIER";
+  if (/\bRTO\b/.test(spaced) || /RETURN(ED)? TO (SHIPPER|ORIGIN|SENDER)/.test(spaced)) return "RETURN_TO_SHIPPER";
+  if (/^RETURNED\b/.test(spaced)) return "RETURNED";
+  if (/PICKED (UP|IN)/.test(spaced)) return "PICKED_UP"; // "Picked up" / Leopards "Shipment picked in {city}"
+  if (/IN TRANSIT|DISPATCHED|^ARRIVED|^RECEIVED|^SORTED|DEPARTED/.test(spaced)) return "IN_TRANSIT";
+  if (/^BOOKED$|^PICKUP REQUEST/.test(spaced)) return "BOOKED";
+  if (/^CANCEL/.test(spaced)) return "CANCELLED";
+  return canonical; // unknown (e.g. Leopards "PENDING" failed attempt) → unchanged, stays unmapped
+}
 
 const TRUEISH = new Set(["1", "true", "success", "ok", "yes"]);
 
@@ -871,7 +926,11 @@ export async function syncOrderTracking(session: Actor | null, orderId: string):
     added++;
   }
 
-  const mapped = courierStatus ? STATUS_MAP[courierStatus.toUpperCase()] : undefined;
+  // Free-text courier statuses (Leopards "ASSIGNED TO COURIER IN SARGODHA" etc.)
+  // are normalized to canonical keys before the STATUS_MAP lookup — exact-match
+  // only left orders stuck at BOOKED and made later syncs report "up to date".
+  const statusKey = courierStatus ? normalizeCourierStatus(courierStatus) : "";
+  const mapped = statusKey ? STATUS_MAP[statusKey] : undefined;
   await store.update("orders", orderId, { last_synced_at: new Date().toISOString() });
   if (shipment) {
     await store.update("shipments", shipment.id, {
@@ -883,16 +942,14 @@ export async function syncOrderTracking(session: Actor | null, orderId: string):
   // ---- WhatsApp notification fan-out (courier-level events; never throws) ----
   // OUT_FOR_DELIVERY and SHIPPER ADVISE never change the RoyalCarePK order
   // status (they are courier-side states), so they are detected here on the
-  // raw courier status. Idempotency keys make repeated syncs safe.
-  const courierUpper = String(courierStatus ?? "").toUpperCase();
-  if (courierUpper === "OUT_FOR_DELIVERY") {
+  // NORMALIZED courier key — Leopards' free-text spellings ("OUT FOR
+  // DELIVERY", "SHIPPER ADVISE …", "DELIVERED TO WAREHOUSE") now match exactly
+  // like the canonical underscore forms always did. Idempotency keys make
+  // repeated syncs safe.
+  if (statusKey === "OUT_FOR_DELIVERY") {
     await enqueueWhatsAppOrderEvent({ orderId, type: "OUT_FOR_DELIVERY" });
   }
-  if (
-    courierUpper.includes("SHIPPER_ADVISE") ||
-    courierUpper.includes("SHIPPER ADVISE") ||
-    courierUpper.includes("RETURN_TO_SHIPPER")
-  ) {
+  if (statusKey.includes("SHIPPER_ADVISE") || statusKey.includes("RETURN_TO_SHIPPER")) {
     await enqueueWhatsAppOrderEvent({ orderId, type: "SHIPPER_ADVISE" });
   }
 
